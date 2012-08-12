@@ -9,15 +9,14 @@ import Control.Applicative
 import Control.Error
 import Control.Monad.IO.Class
 import Data.Maybe
-import Network.BitcoinRPC hiding (BitcoinAddress)
-import Network.MtGoxAPI hiding (BitcoinAddress)
+import Network.BitcoinRPC
+import Network.MtGoxAPI
 import System.Environment
 import System.FilePath
 
-import qualified Network.BitcoinRPC as RPC
-import qualified Network.MtGoxAPI as MtGox
-
 import qualified Control.Exception as E
+
+import AddressUtils
 
 smallestCoin :: Integer
 smallestCoin = 1000000
@@ -56,8 +55,6 @@ readTargetBalance = do
 -- TODO: improve logging
 -- TODO: make sure that function is safe to call twice and will
 --       not take action too often
--- TODO: think about BitcoinAddress problematic ->
---          maybe combined type module really needed
 
 runRebalancer :: Maybe WatchdogLogger-> RPCAuth -> MtGoxAPIHandles -> IO (Maybe RebalancerLog)
 runRebalancer mLogger rpcAuth mtgoxHandles = do
@@ -80,18 +77,16 @@ runRebalancer mLogger rpcAuth mtgoxHandles = do
             return $ Just log
   where
     mtgoxToBitcoind v = do
-        addrT <- btcAddress <$> getNewAddressR Nothing rpcAuth
-        (callHTTPApi' mtgoxHandles withdrawBitcoins)
-                            (MtGox.BitcoinAddress addrT) v
+        addr <- adjustAddr <$> getNewAddressR Nothing rpcAuth
+        (callHTTPApi' mtgoxHandles withdrawBitcoins) addr v     -- returns Either String WithdrawStatus
         return ()
     bitcoindToMtgox v = do
-        addrM <- callHTTPApi mtgoxHandles getBitcoinDepositAddressR
+        addrM <- fmap adjustAddr <$>
+                    callHTTPApi mtgoxHandles getBitcoinDepositAddressR
         case addrM of
             Nothing -> return ()
             Just addr -> do
-                let addrT = baAddress . bdaAddr $ addr
-                sendToAddress rpcAuth
-                    (RPC.BitcoinAddress addrT) (BitcoinAmount v)
+                sendToAddress rpcAuth addr (BitcoinAmount v)    -- returns Either String (Either SendError TransactionID)
                 return ()
 
 decideRebalance :: Integer-> Integer-> Integer-> Integer-> (RebalancerLog, RebalancerAction)
