@@ -3,6 +3,7 @@
 module LoggingUtils
     ( initLogger
     , LogContent(..)
+    , Logger
     ) where
 
 import Control.Applicative
@@ -10,11 +11,19 @@ import Data.Serialize
 import Data.Time
 import GHC.Generics
 
-data LogContent = LogMisc { lcInfo :: String }
-                  deriving (Generic, Show)
+type Logger = LogContent -> IO ()
 
-data LogEntry = LogEntry { leTimestamp :: UTCTime
-                         , leContent :: LogContent
+data LogContent = RebalancerFailure { lcInfo :: String }
+                | RebalancerStatus { lcRLevel :: Integer
+                                   , lcRWillAct :: Bool
+                                   , lcInfo :: String
+                                   }
+                | RebalancerAction { lcInfo :: String }
+                | LogMisc { lcInfo :: String }
+                deriving (Generic, Show)
+
+data LogEntry = LogEntry { _leTimestamp :: UTCTime
+                         , _leContent :: LogContent
                          }
                 deriving (Generic, Show)
 
@@ -26,11 +35,11 @@ instance Serialize UTCTime where
 
 instance Serialize LogEntry
 
-initLogger :: IO (LogContent -> IO ())
+initLogger :: IO Logger
 initLogger = return logger
 
-logger :: LogContent -> IO ()
+logger :: Logger
 logger content = do
     now <- getCurrentTime
     let entry = LogEntry now content
-    putStrLn $ show entry
+    print entry

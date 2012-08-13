@@ -16,7 +16,7 @@ import ScrambleCredentials
 
 getConfFile home = home </> ".bridgewalker/config"
 
-readConfig :: IO (RPCAuth, MtGoxCredentials)
+readConfig :: IO (RPCAuth, MtGoxCredentials, Integer)
 readConfig = do
     confFile <- getConfFile <$> getEnv "HOME"
     v <- runErrorT $ do
@@ -28,11 +28,14 @@ readConfig = do
 
             authKeyScrambled <- get cp "DEFAULT" "mtgox_auth_key"
             authSecretScrambled <- get cp "DEFAULT" "mtgox_auth_secret"
+            safetyMarginF <- get cp "DEFAULT" "safety_margin"
             let authKey = B8.pack $
                             unScrambleText authKeyScrambled hardcodedKeyA
                 authSecret = B8.pack $
                                 unScrambleText authSecretScrambled hardcodedKeyB
-            return (rpcAuth, initMtGoxCredentials authKey authSecret)
+                safetyMargin = round $ (safetyMarginF :: Double) * 10 ^ (8 :: Integer)
+            return (rpcAuth, initMtGoxCredentials authKey authSecret,
+                                safetyMargin)
     case v of
         Left msg -> error $ "Reading the configuration failed " ++ show msg
         Right cfg -> return cfg

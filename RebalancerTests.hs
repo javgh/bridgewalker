@@ -14,17 +14,19 @@ smallestCoin :: Integer
 smallestCoin = 1000000
 
 propSensibleRebalancer targetBalance zeroConfBalance
-                       enoughConfBalance mtgoxBalance =
+                       enoughConfBalance mtgoxBalance safetyMargin =
     let (log, action) = decideRebalance targetBalance zeroConfBalance
                                             enoughConfBalance mtgoxBalance
+                                            safetyMargin
     in case action of
         DoNothing -> True
         MtGoxToBitcoind v -> v >= smallestCoin
         BitcoindToMtGox v -> v >= smallestCoin
 
-performRebalancerTest t zb eb mb expectedLog expectedAction = do
+performRebalancerTest t zb eb mb sM expectedLog expectedAction = do
     let (log, action) = decideRebalance (t * smallestCoin) (zb * smallestCoin)
                                         (eb * smallestCoin) (mb * smallestCoin)
+                                        (sM * smallestCoin)
         adjustedAction =
             case action of
                 DoNothing -> DoNothing
@@ -35,41 +37,50 @@ performRebalancerTest t zb eb mb expectedLog expectedAction = do
 
 test1 :: Test
 test1 = testCase "mtgox to bitcoind" $
-    performRebalancerTest 40 25 25 100 (WillRebalance 1) (MtGoxToBitcoind 15)
+    performRebalancerTest 40 25 25 100 0 (WillRebalance 1) (MtGoxToBitcoind 15)
 
 test2 :: Test
 test2 = testCase "mtgox to bitcoind, capped" $
-    performRebalancerTest 40 25 25 10 (WillRebalance 1) (MtGoxToBitcoind 10)
+    performRebalancerTest 40 25 25 10 0 (WillRebalance 1) (MtGoxToBitcoind 10)
 
 test3 :: Test
 test3 = testCase "mtgox to bitcoind, not possible" $
-    performRebalancerTest 40 25 25 0 (UnableToRebalance 1) DoNothing
+    performRebalancerTest 40 25 25 0 0 (UnableToRebalance 1) DoNothing
 
 test4 :: Test
 test4 = testCase "mtgox to bitcoind, big diff" $
-    performRebalancerTest 40 5 40 100 (WillRebalance 3) (MtGoxToBitcoind 35)
+    performRebalancerTest 40 5 40 100 0 (WillRebalance 3) (MtGoxToBitcoind 35)
 
 test5 :: Test
 test5 = testCase "already balanced" $
-    performRebalancerTest 40 38 10 10 NothingDoTo DoNothing
+    performRebalancerTest 40 38 10 10 0 NothingDoTo DoNothing
 
 test6 :: Test
 test6 = testCase "bitcoind to mtgox" $
-    performRebalancerTest 40 52 40 100 (WillRebalance 1) (BitcoindToMtGox 12)
+    performRebalancerTest 40 52 40 100 0 (WillRebalance 1) (BitcoindToMtGox 12)
 
 test7 :: Test
 test7 = testCase "bitcoind to mtgox, capped" $
-    performRebalancerTest 40 52 5 100 (WillRebalance 1) (BitcoindToMtGox 5)
+    performRebalancerTest 40 52 5 100 0 (WillRebalance 1) (BitcoindToMtGox 5)
 
 test8 :: Test
 test8 = testCase "bitcoind to mtgox, not possible" $
-    performRebalancerTest 40 52 0 100 (UnableToRebalance 1) DoNothing
+    performRebalancerTest 40 52 0 100 0 (UnableToRebalance 1) DoNothing
 
 test9 :: Test
 test9 = testCase "bitcoind to mtgox, big diff" $
-    performRebalancerTest 40 62 0 100 (UnableToRebalance 2) DoNothing
+    performRebalancerTest 40 62 0 100 0 (UnableToRebalance 2) DoNothing
+
+test10 :: Test
+test10 = testCase "mtgox to bitcoind; not possible because of safety margin" $
+    performRebalancerTest 40 25 25 100 100 (UnableToRebalance 1) DoNothing
+
+test11 :: Test
+test11 = testCase "bitcoind to mtgox; not possible because of safety margin" $
+    performRebalancerTest 40 52 40 100 40 (UnableToRebalance 1) DoNothing
 
 rebalancerTests :: [Test]
 rebalancerTests =
-    [ testProperty "rebalancer acts sensible" propSensibleRebalancer ]
-    ++ [ test1, test2, test3, test4, test5, test6, test7, test8, test9 ]
+    testProperty "rebalancer acts sensible" propSensibleRebalancer :
+        [ test1, test2, test3, test4, test5, test6, test7, test8, test9, test10
+        , test11 ]
