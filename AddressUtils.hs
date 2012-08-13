@@ -1,5 +1,6 @@
 module AddressUtils
     ( adjustAddr
+    , adjustAmount
     ) where
 
 import qualified Data.Text as T
@@ -26,5 +27,22 @@ instance IsBitcoinAddress MtGox.BitcoinDepositAddress
     addrToText = addrToText . MtGox.bdaAddr
     textToAddr = MtGox.BitcoinDepositAddress . textToAddr
 
+class IsBitcoinAmount a where
+    amountToInteger :: a -> Integer
+    integerToAmount :: Integer -> a
+
+instance IsBitcoinAmount Integer
+  where
+    amountToInteger = id
+    integerToAmount = id
+
+instance IsBitcoinAmount RPC.BitcoinAmount
+  where
+    amountToInteger = RPC.btcAmount
+    integerToAmount = RPC.BitcoinAmount
+
 adjustAddr :: (IsBitcoinAddress a, IsBitcoinAddress b) => a -> b
 adjustAddr = textToAddr . addrToText
+
+adjustAmount :: (IsBitcoinAmount a, IsBitcoinAmount b) => a -> b
+adjustAmount = integerToAmount . amountToInteger

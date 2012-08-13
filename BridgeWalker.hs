@@ -7,7 +7,7 @@ import LoggingUtils
 import Rebalancer
 
 main = do
-    (rpcAuth, mtgoxCreds, safetyMargin) <- readConfig
+    (rpcAuth, mtgoxCreds, safetyMargin, _) <- readConfig
     mtgoxHandles <- initMtGoxAPI Nothing mtgoxCreds
     appLogger <- initLogger
     rbHandle <- initRebalancer appLogger Nothing
