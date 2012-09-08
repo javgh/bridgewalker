@@ -1,5 +1,6 @@
 module Config
     ( readConfig
+    , BridgewalkerConfig(..)
     ) where
 
 import Control.Applicative
@@ -15,9 +16,17 @@ import qualified Data.Text as T
 
 import ScrambleCredentials
 
+data BridgewalkerConfig = BridgewalkerConfig
+                            { bcRPCAuth :: RPCAuth
+                            , bcMtGoxCredentials :: MtGoxCredentials
+                            , bcSafetyMargin :: Integer
+                            , bcNotifyFile :: FilePath
+                            , bcMarkerAddresses :: [(BitcoinAddress, BitcoinAmount)]
+                            }
+
 getConfFile home = home </> ".bridgewalker/config"
 
-readConfig :: IO (RPCAuth, MtGoxCredentials, Integer, FilePath, [(BitcoinAddress, BitcoinAmount)])
+readConfig :: IO (BridgewalkerConfig)
 readConfig = do
     confFile <- getConfFile <$> getEnv "HOME"
     v <- runErrorT $ do
@@ -37,9 +46,13 @@ readConfig = do
                 authSecret = B8.pack $
                                 unScrambleText authSecretScrambled hardcodedKeyB
                 safetyMargin = round $ (safetyMarginF :: Double) * 10 ^ (8 :: Integer)
-            return (rpcAuth, initMtGoxCredentials authKey authSecret,
-                                safetyMargin, notifyFile,
-                                adjustMarkerAddresses (read markerAddresses))
+            return $ BridgewalkerConfig
+                        { bcRPCAuth = rpcAuth
+                        , bcMtGoxCredentials = initMtGoxCredentials authKey authSecret
+                        , bcSafetyMargin = safetyMargin
+                        , bcNotifyFile = notifyFile
+                        , bcMarkerAddresses = adjustMarkerAddresses (read markerAddresses)
+                        }
     case v of
         Left msg -> error $ "Reading the configuration failed " ++ show msg
         Right cfg -> return cfg

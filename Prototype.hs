@@ -8,8 +8,7 @@ import Control.Monad
 import Database.PostgreSQL.Simple
 import Data.Serialize
 import Network.BitcoinRPC
-import Network.BitcoinRPC.Events
-import Network.BitcoinRPC.MarkerAddresses
+import Network.BitcoinRPC.Events.MarkerAddresses
 import Network.MtGoxAPI
 
 import qualified Data.ByteString as B
@@ -19,6 +18,15 @@ import AddressUtils
 import Config
 import Rebalancer
 import LoggingUtils
+
+data BridgewalkerHandles = BridgewalkerHandles
+                            { bhAppLogger :: Logger
+                            , bhConfig :: BridgewalkerConfig
+                            , bhDBConn :: Connection
+                            , bhMtGoxHandles :: MtGoxAPIHandles
+                            , bhFilteredBitcoinEventTaskHandle :: FilteredBitcoinEventTaskHandle
+                            , bhRebalancerHandle :: RebalancerHandle
+                            }
 
 myConnectInfo :: B.ByteString
 myConnectInfo = "dbname=bridgewalker"
@@ -37,39 +45,57 @@ writeStateToDB conn key stateStr = do
     execute conn "update bitcoind set state=? where key=?" (stateStr, key)
     return ()
 
-writeBitcoindStateToDB :: Connection -> EventTaskState -> MAStore -> IO ()
-writeBitcoindStateToDB conn etState maStore = do
-    let etStateStr = B64.encode . encode $ etState
-        maStoreStr = B64.encode . encode $ maStore
-    writeStateToDB conn "eventtaskstate" etStateStr
-    writeStateToDB conn "mastore" maStoreStr
+writeBitcoindStateToDB :: Connection -> FilteredEventTaskState -> IO ()
+writeBitcoindStateToDB conn fetState = do
+    let fetStateStr = B64.encode . encode $ fetState
+    writeStateToDB conn "filteredeventtaskstate" fetStateStr
     return ()
 
-readBitcoindStateFromDB :: Connection -> IO (EventTaskState, MAStore)
+readBitcoindStateFromDB :: Connection -> IO (FilteredEventTaskState)
 readBitcoindStateFromDB conn = do
-    etStateStr <- readStateFromDB conn "eventtaskstate"
-    maStoreStr <- readStateFromDB conn "mastore"
-    let etState = B64.decode etStateStr >>= decode
-        maStore = B64.decode maStoreStr >>= decode
-    return (expectRight etState, expectRight maStore)
+    fetStateStr <- readStateFromDB conn "filteredeventtaskstate"
+    let fetState = B64.decode fetStateStr >>= decode
+    return $ expectRight fetState
   where
     expectRight (Right r) = r
     expectRight (Left msg) = error msg
 
---main = connectPostgreSQL myConnectInfo >>= \conn -> do
---    (etS, maS) <- readBitcoindStateFromDB conn
---    writeBitcoindStateToDB conn etS maS
-
 acceptAfterThreeConfs txHeader = thConfirmations txHeader >= 3
 
-justCatchUp :: Connection-> Chan (EventTaskState, [BitcoinEvent]) -> MAStore -> IO ()
-justCatchUp dbConn betChan maStore = go maStore
-  where
-    go maStore' = do
-        (etState', events) <- readChan betChan
-        let (maStore'', _) = processEvents maStore' events
-        writeBitcoindStateToDB dbConn etState' maStore''
-        go maStore''
+periodicRebalancing :: RebalancerHandle -> IO ()
+periodicRebalancing rbHandle = forever $ do
+    runRebalancer rbHandle
+    threadDelay $ 5 * 10 ^ (6 :: Integer)
+
+initBridgewalkerHandles :: B.ByteString -> IO BridgewalkerHandles
+initBridgewalkerHandles connectInfo = do
+    appLogger <- initLogger
+    bwConfig <- readConfig
+    let maConfig = bcMarkerAddresses bwConfig
+    dbConn <- connectPostgreSQL connectInfo
+    fetState <- readBitcoindStateFromDB dbConn >>= \s
+                    -> return $ updateMarkerAddresses s maConfig
+    mtgoxHandles <- initMtGoxAPI Nothing (bcMtGoxCredentials bwConfig)
+    fbetHandle <- initFilteredBitcoinEventTask Nothing (bcRPCAuth bwConfig)
+                    (bcNotifyFile bwConfig) acceptAfterThreeConfs fetState
+    rbHandle <- initRebalancer appLogger Nothing (bcRPCAuth bwConfig)
+                                    mtgoxHandles (bcSafetyMargin bwConfig)
+    _ <- forkIO $ periodicRebalancing rbHandle
+    return $ BridgewalkerHandles { bhAppLogger = appLogger
+                                 , bhConfig = bwConfig
+                                 , bhDBConn = dbConn
+                                 , bhMtGoxHandles = mtgoxHandles
+                                 , bhFilteredBitcoinEventTaskHandle = fbetHandle
+                                 , bhRebalancerHandle = rbHandle
+                                 }
+
+justCatchUp :: BridgewalkerHandles -> IO ()
+justCatchUp bwHandles =
+    let fbetHandle = bhFilteredBitcoinEventTaskHandle bwHandles
+        dbConn = bhDBConn bwHandles
+    in forever $ do
+        (fetState, _) <- waitForFilteredBitcoinEvents fbetHandle
+        writeBitcoindStateToDB dbConn fetState
 
 tryToSellBtc :: MtGoxAPIHandles -> Integer -> BitcoinAmount -> IO (Either String OrderStats)
 tryToSellBtc mtgoxHandles safetyMargin amount = runEitherT $ do
@@ -87,57 +113,36 @@ displayStats stats =
     let usd = fromIntegral (usdEarned stats) / (10 ^ (5 :: Integer))
     in putStrLn $ "Account activity: + $" ++ show usd
 
-actOnDeposits :: Connection-> Chan (EventTaskState, [BitcoinEvent])-> MAStore-> MtGoxAPIHandles-> Integer-> IO ()
-actOnDeposits dbConn betChan maStore mtgoxHandles safetyMargin = go maStore
+actOnDeposits :: BridgewalkerHandles -> IO ()
+actOnDeposits bwHandles =
+    let fbetHandle = bhFilteredBitcoinEventTaskHandle bwHandles
+        dbConn = bhDBConn bwHandles
+        mtgoxHandles = bhMtGoxHandles bwHandles
+        safetyMargin = bcSafetyMargin . bhConfig $ bwHandles
+    in forever $ do
+        (fetState, fEvents) <- waitForFilteredBitcoinEvents fbetHandle
+        writeBitcoindStateToDB dbConn fetState
+        mapM_ (act mtgoxHandles safetyMargin) fEvents
   where
-    go maStore' = do
-        (etState', events) <- readChan betChan
-        let (maStore'', fevents) = processEvents maStore' events
-        writeBitcoindStateToDB dbConn etState' maStore''
-        mapM_ act fevents
-        go maStore''
-    act fevent = case fevent of
-                    fTx@FilteredNewTransaction{} -> do
-                        let amount = tAmount . fntTx $ fTx
-                        sell <- tryToSellBtc mtgoxHandles safetyMargin amount
-                        case sell of
-                            Left msg -> putStrLn msg
-                            Right stats -> displayStats stats
-                    _ -> return ()
-
-periodicRebalancing :: RebalancerHandle -> IO ()
-periodicRebalancing rbHandle = forever $ do
-    runRebalancer rbHandle
-    threadDelay $ 5 * 10 ^ (6 :: Integer)
+    act mtgoxHandles safetyMargin fEvent =
+            case fEvent of
+                fTx@FilteredNewTransaction{} -> do
+                    let amount = tAmount . fntTx $ fTx
+                    sell <- tryToSellBtc mtgoxHandles safetyMargin amount
+                    case sell of
+                        Left msg -> putStrLn msg
+                        Right stats -> displayStats stats
+                _ -> return ()
 
 main :: IO ()
 main = do
-    dbConn <- connectPostgreSQL myConnectInfo
-    (etState, maStore) <- readBitcoindStateFromDB dbConn
-    (rpcAuth, mtgoxCreds, safetyMargin, bitcoindNotifyFile, markerAddresses)
-        <- readConfig
-    appLogger <- initLogger
-    let maStore' = updateMarkerAddresses maStore markerAddresses
-    betChan <- newChan
-    mtgoxHandles <- initMtGoxAPI Nothing mtgoxCreds
-    _ <- forkIO $ bitcoinEventTask Nothing rpcAuth bitcoindNotifyFile
-                    acceptAfterThreeConfs etState betChan
-    rbHandle <- initRebalancer appLogger Nothing
-                                    rpcAuth mtgoxHandles safetyMargin
-    --justCatchUp dbConn betChan maStore
-    _ <- forkIO $ periodicRebalancing rbHandle
-    actOnDeposits dbConn betChan maStore' mtgoxHandles safetyMargin
-    return ()
+    bwHandles <- initBridgewalkerHandles myConnectInfo
+    --justCatchUp bwHandles
+    actOnDeposits bwHandles
 
--- TODO: make processEvents from MarkerAddresses easier to use;
---       -> wrap bitcoinEventTask and processEvents to create one single loop
---       also: switch to handle structure and replace 'readChan' with a custom
---       'getNewEvents' or something like that
---
 -- TODO: Start PendingBridgeWalkerActions infrastructure to do things like
 --         selling BTC as soon as it is possible
 --
--- TODO: Refactor config module; probably use some kind of app-wide config
---       datatype
---
--- TODO: Figure out better way to pass all the various handlers around
+--main = connectPostgreSQL myConnectInfo >>= \conn -> do
+--    fetS <- readBitcoindStateFromDB conn
+--    writeBitcoindStateToDB conn fetS
