@@ -18,16 +18,9 @@ import AddressUtils
 import Config
 import Rebalancer
 import LoggingUtils
+import PendingActionsTracker
 
-data BridgewalkerHandles = BridgewalkerHandles
-                            { bhAppLogger :: Logger
-                            , bhConfig :: BridgewalkerConfig
-                            , bhDBConn :: Connection
-                            , bhMtGoxHandles :: MtGoxAPIHandles
-                            , bhFilteredBitcoinEventTaskHandle :: FilteredBitcoinEventTaskHandle
-                            , bhRebalancerHandle :: RebalancerHandle
-                            }
-
+import qualified PendingActionsTracker as PAT
 
 myConnectInfo :: B.ByteString
 myConnectInfo = "dbname=bridgewalker"
@@ -35,7 +28,7 @@ myConnectInfo = "dbname=bridgewalker"
 readStateFromDB :: Connection -> B.ByteString -> IO B.ByteString
 readStateFromDB conn key = do
     Only stateStr <- getFirstRow <$>
-        query conn "select state from bitcoind where key=?" (Only key)
+        query conn "select state from states where key=?" (Only key)
     return stateStr
   where
     getFirstRow [] = error "Expected at least one row, but got none."
@@ -43,7 +36,7 @@ readStateFromDB conn key = do
 
 writeStateToDB :: Connection -> B.ByteString -> B.ByteString -> IO ()
 writeStateToDB conn key stateStr = do
-    execute conn "update bitcoind set state=? where key=?" (stateStr, key)
+    execute conn "update states set state=? where key=?" (stateStr, key)
     return ()
 
 writeBitcoindStateToDB :: Connection -> FilteredEventTaskState -> IO ()
@@ -57,9 +50,22 @@ readBitcoindStateFromDB conn = do
     fetStateStr <- readStateFromDB conn "filteredeventtaskstate"
     let fetState = B64.decode fetStateStr >>= decode
     return $ expectRight fetState
-  where
-    expectRight (Right r) = r
-    expectRight (Left msg) = error msg
+
+writePendingActionsStateToDB :: Connection -> PendingActionsState -> IO ()
+writePendingActionsStateToDB conn paState = do
+    let paStateStr = B64.encode . encode $ paState
+    writeStateToDB conn "pendingactionsstate" paStateStr
+    return ()
+
+readPendingActionsStateFromDB :: Connection -> IO (PendingActionsState)
+readPendingActionsStateFromDB conn = do
+    paStateStr <- readStateFromDB conn "pendingactionsstate"
+    let paState = B64.decode paStateStr >>= decode
+    return $ expectRight paState
+
+expectRight :: Either String t -> t
+expectRight (Right r) = r
+expectRight (Left msg) = error msg
 
 acceptAfterThreeConfs txHeader = thConfirmations txHeader >= 3
 
@@ -114,26 +120,55 @@ displayStats stats =
     let usd = fromIntegral (usdEarned stats) / (10 ^ (5 :: Integer))
     in putStrLn $ "Account activity: + $" ++ show usd
 
+--actOnDeposits :: BridgewalkerHandles -> IO ()
+--actOnDeposits bwHandles =
+--    let fbetHandle = bhFilteredBitcoinEventTaskHandle bwHandles
+--        dbConn = bhDBConn bwHandles
+--        mtgoxHandles = bhMtGoxHandles bwHandles
+--        safetyMargin = bcSafetyMargin . bhConfig $ bwHandles
+--    in forever $ do
+--        (fetState, fEvents) <- waitForFilteredBitcoinEvents fbetHandle
+--        writeBitcoindStateToDB dbConn fetState
+--        mapM_ (act mtgoxHandles safetyMargin) fEvents
+--  where
+--    act mtgoxHandles safetyMargin fEvent =
+--            case fEvent of
+--                fTx@FilteredNewTransaction{} -> do
+--                    let amount = tAmount . fntTx $ fTx
+--                    sell <- tryToSellBtc mtgoxHandles safetyMargin amount
+--                    case sell of
+--                        Left msg -> putStrLn msg
+--                        Right stats -> displayStats stats
+--                _ -> return ()
+
 actOnDeposits :: BridgewalkerHandles -> IO ()
 actOnDeposits bwHandles =
     let fbetHandle = bhFilteredBitcoinEventTaskHandle bwHandles
         dbConn = bhDBConn bwHandles
-        mtgoxHandles = bhMtGoxHandles bwHandles
-        safetyMargin = bcSafetyMargin . bhConfig $ bwHandles
     in forever $ do
         (fetState, fEvents) <- waitForFilteredBitcoinEvents fbetHandle
-        writeBitcoindStateToDB dbConn fetState
-        mapM_ (act mtgoxHandles safetyMargin) fEvents
+        print "--- fEvents"
+        mapM_ print fEvents
+        let actions = concatMap convertToActions fEvents
+        print "--- actions"
+        print actions
+        withTransaction dbConn $ do     -- atomic transaction: do not update
+                                        -- fetState, before recording necessary
+                                        -- actions to be done as a result
+            paState <- readPendingActionsStateFromDB dbConn
+            print paState
+            let paState' = addPendingActions paState actions
+            writeBitcoindStateToDB dbConn fetState
+            print "--- new paState"
+            print paState'
+            print "--- ---"
+            writePendingActionsStateToDB dbConn paState'
   where
-    act mtgoxHandles safetyMargin fEvent =
-            case fEvent of
-                fTx@FilteredNewTransaction{} -> do
-                    let amount = tAmount . fntTx $ fTx
-                    sell <- tryToSellBtc mtgoxHandles safetyMargin amount
-                    case sell of
-                        Left msg -> putStrLn msg
-                        Right stats -> displayStats stats
-                _ -> return ()
+    convertToActions fTx@FilteredNewTransaction{} =
+        let amount = adjustAmount . tAmount . fntTx $ fTx
+            address = tAddress . fntTx $ fTx
+        in [DepositAction { baAmount = amount, PAT.baAddress = address }]
+    convertToActions _ = []
 
 main :: IO ()
 main = do

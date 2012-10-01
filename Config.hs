@@ -1,12 +1,15 @@
 module Config
     ( readConfig
     , BridgewalkerConfig(..)
+    , BridgewalkerHandles(..)
     ) where
 
 import Control.Applicative
 import Control.Monad.Error
+import Database.PostgreSQL.Simple
 import Data.ConfigFile
 import Network.BitcoinRPC
+import Network.BitcoinRPC.Events.MarkerAddresses
 import Network.MtGoxAPI hiding (BitcoinAddress)
 import System.Environment
 import System.FilePath
@@ -14,14 +17,25 @@ import System.FilePath
 import qualified Data.ByteString.Char8 as B8
 import qualified Data.Text as T
 
+import LoggingUtils
+import Rebalancer
 import ScrambleCredentials
 
 data BridgewalkerConfig = BridgewalkerConfig
-                            { bcRPCAuth :: RPCAuth
-                            , bcMtGoxCredentials :: MtGoxCredentials
-                            , bcSafetyMargin :: Integer
-                            , bcNotifyFile :: FilePath
-                            , bcMarkerAddresses :: [(BitcoinAddress, BitcoinAmount)]
+                            { bcRPCAuth :: !RPCAuth
+                            , bcMtGoxCredentials :: !MtGoxCredentials
+                            , bcSafetyMargin :: !Integer
+                            , bcNotifyFile :: !FilePath
+                            , bcMarkerAddresses :: ![(BitcoinAddress, BitcoinAmount)]
+                            }
+
+data BridgewalkerHandles = BridgewalkerHandles
+                            { bhAppLogger :: Logger
+                            , bhConfig :: BridgewalkerConfig
+                            , bhDBConn :: Connection
+                            , bhMtGoxHandles :: MtGoxAPIHandles
+                            , bhFilteredBitcoinEventTaskHandle :: FilteredBitcoinEventTaskHandle
+                            , bhRebalancerHandle :: RebalancerHandle
                             }
 
 getConfFile home = home </> ".bridgewalker/config"
