@@ -184,9 +184,6 @@ main = do
     --justCatchUp bwHandles
     actOnDeposits bwHandles
 
--- TODO: Start PendingBridgeWalkerActions infrastructure to do things like
---         selling BTC as soon as it is possible
---
 -- TODO: Find bug - either: something related to standard transactions
 --                      or: something related to marker transactions, that
 --                            confirm while the application is not running

@@ -45,8 +45,8 @@ data PendingActionsStateModification = RemoveAction
                                      | AddPauseAction String
                                         -- parameter describes reason for pause
 
-data BridgewalkerAccount = BridgewalkerAccount { bAccount :: T.Text }
-                           deriving (Show)
+data BridgewalkerAccount = BridgewalkerAccount { bAccount :: Integer }
+                           deriving (Generic, Show)
 
 data WithdrawalType = WithdrawBTC { wtAmount :: Integer }
                     | WithdrawUSD { wtAmount :: Integer }
@@ -69,9 +69,7 @@ data BridgewalkerAction = DepositAction { baAmount :: Integer
 
 data SellOrderProblem = MtGoxLowBalance | MtGoxCallError String
 
-instance Serialize BridgewalkerAccount where
-    put = put . T.unpack . bAccount
-    get = BridgewalkerAccount . T.pack <$> get
+instance Serialize BridgewalkerAccount
 
 instance Serialize BridgewalkerAction
 
@@ -153,27 +151,29 @@ processDeposit bwHandles amount address =
     let dbConn = bhDBConn bwHandles
         logger = bhAppLogger bwHandles
         minimalOrderBTC = bcMtGoxMinimalOrderBTC . bhConfig $ bwHandles
-        magicAddress = RPC.BitcoinAddress "1LzvHJjoh1gPXCGYx3iDPoTN9WPtEtnMH"
-        magicAccount = "jan" :: String
+        magicAddress = RPC.BitcoinAddress "13NsGekvJKyGTeteu6fjyTxKbpkBox58j8"
+        magicAccount = 1 :: Integer
     in if adjustAddr address == magicAddress
         then do
             btcBalance <- getBTCBalance dbConn magicAccount
             let newBalance = btcBalance + amount
-            execute dbConn "update accounts set btc_balance=? where account=?"
-                                (newBalance, magicAccount)
+            execute dbConn
+                        "update accounts set btc_balance=? where account_nr=?"
+                        (newBalance, magicAccount)
             let logMsg = DepositProcessed
                             { lcAccount = magicAccount
                             , lcInfo = show amount
                                         ++ " BTC deposited into account "
-                                        ++ magicAccount ++ " - balance is now "
+                                        ++ show magicAccount
+                                        ++ " - balance is now "
                                         ++ show newBalance ++ " BTC."
                             }
             logger logMsg
             return $ if newBalance >= minimalOrderBTC
                         then let action = SellBTCAction
                                             { baAmount = newBalance
-                                            , baAccount = BridgewalkerAccount
-                                                         . T.pack $ magicAccount
+                                            , baAccount =
+                                                BridgewalkerAccount magicAccount
                                             }
                              in ReplaceAction action
                         else RemoveAction
@@ -189,7 +189,7 @@ sellBTC bwHandles amount bwAccount = do
         safetyMarginBTC = bcSafetyMarginBTC . bhConfig $ bwHandles
         logger = bhAppLogger bwHandles
         dbConn = bhDBConn bwHandles
-        account = T.unpack . bAccount $ bwAccount
+        account = bAccount $ bwAccount
     sell <- tryToExecuteSellOrder mtgoxHandles safetyMarginBTC amount
     case sell of
         Left (MtGoxCallError msg) -> do
@@ -214,14 +214,14 @@ sellBTC bwHandles amount bwAccount = do
             let newBTCBalance = max 0 (btcBalance - amount)
                 newUSDBalance = usdBalance + usdAmount
             execute dbConn "update accounts set btc_balance=?, usd_balance=?\
-                                \ where account=?"
+                                \ where account_nr=?"
                                 (newBTCBalance, newUSDBalance, account)
             let logMsg = BTCSold
                             { lcAccount = account
                             , lcInfo = show amount
                                         ++ " BTC sold on Mt.Gox and credited "
                                         ++ show usdAmount ++ " USD to account "
-                                        ++ account ++ " - balance is now "
+                                        ++ show account ++ " - balance is now "
                                         ++ show newUSDBalance ++ " USD and "
                                         ++ show newBTCBalance ++ " BTC."
                             }
@@ -242,21 +242,21 @@ tryToExecuteSellOrder mtgoxHandles safetyMarginBTC amount = runEitherT $ do
     adjustError (Left err) = Left (MtGoxCallError err)
     adjustError (Right result) = Right result
 
-getBTCBalance :: Connection -> String -> IO Integer
+getBTCBalance :: Connection -> Integer -> IO Integer
 getBTCBalance dbConn account = do
-    let errMsg = "Expected to find account " ++ account
+    let errMsg = "Expected to find account " ++ show account
                     ++ " while doing getBTCBalance, but failed."
     Only balance <- expectOneRow errMsg <$>
-        query dbConn "select btc_balance from accounts where account=?"
+        query dbConn "select btc_balance from accounts where account_nr=?"
                         (Only account)
     return balance
 
-getUSDBalance :: Connection -> String -> IO Integer
+getUSDBalance :: Connection -> Integer -> IO Integer
 getUSDBalance dbConn account = do
-    let errMsg = "Expected to find account " ++ account
+    let errMsg = "Expected to find account " ++ show account
                     ++ " while doing getUSDBalance, but failed."
     Only balance <- expectOneRow errMsg <$>
-        query dbConn "select usd_balance from accounts where account=?"
+        query dbConn "select usd_balance from accounts where account_nr=?"
                         (Only account)
     return balance
 

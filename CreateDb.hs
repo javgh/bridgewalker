@@ -25,7 +25,7 @@ main = connectPostgreSQL myConnectInfo >>= \conn -> do
         "insert into states values (?, ?)"
         ("pendingactionsstate" :: B.ByteString, paStateStr)
     execute_ conn
-        "create table accounts ( account text primary key\
+        "create table accounts ( account_nr integer primary key\
                                \, btc_balance integer\
                                \, usd_balance integer)"
     return ()

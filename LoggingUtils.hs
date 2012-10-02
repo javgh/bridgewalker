@@ -19,10 +19,10 @@ data LogContent = RebalancerFailure { lcInfo :: String }
                                    , lcInfo :: String
                                    }
                 | RebalancerAction { lcInfo :: String }
-                | DepositProcessed { lcAccount :: String
+                | DepositProcessed { lcAccount :: Integer
                                    , lcInfo :: String
                                    }
-                | BTCSold { lcAccount :: String
+                | BTCSold { lcAccount :: Integer
                           , lcInfo :: String
                           }
                 | MtGoxLowBTCBalance { lcInfo :: String }
