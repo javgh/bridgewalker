@@ -17,6 +17,7 @@ import System.FilePath
 import qualified Data.ByteString.Char8 as B8
 import qualified Data.Text as T
 
+import ConfigTypes
 import LoggingUtils
 import Rebalancer
 import ScrambleCredentials
@@ -24,9 +25,12 @@ import ScrambleCredentials
 data BridgewalkerConfig = BridgewalkerConfig
                             { bcRPCAuth :: !RPCAuth
                             , bcMtGoxCredentials :: !MtGoxCredentials
-                            , bcSafetyMargin :: !Integer
+                            , bcSafetyMarginBTC :: !Integer
+                            , bcSafetyMarginUSD :: !Integer
+                            , bcMtGoxMinimalOrderBTC :: !Integer
                             , bcNotifyFile :: !FilePath
-                            , bcMarkerAddresses :: ![(BitcoinAddress, BitcoinAmount)]
+                            , bcMarkerAddresses
+                                :: ![(BitcoinAddress, BitcoinAmount)]
                             }
 
 data BridgewalkerHandles = BridgewalkerHandles
@@ -34,8 +38,11 @@ data BridgewalkerHandles = BridgewalkerHandles
                             , bhConfig :: BridgewalkerConfig
                             , bhDBConn :: Connection
                             , bhMtGoxHandles :: MtGoxAPIHandles
-                            , bhFilteredBitcoinEventTaskHandle :: FilteredBitcoinEventTaskHandle
+                            , bhFilteredBitcoinEventTaskHandle
+                                :: FilteredBitcoinEventTaskHandle
                             , bhRebalancerHandle :: RebalancerHandle
+                            , bhPendingActionsTrackerHandle
+                                :: PendingActionsTrackerHandle
                             }
 
 getConfFile home = home </> ".bridgewalker/config"
@@ -52,20 +59,32 @@ readConfig = do
 
             authKeyScrambled <- get cp "DEFAULT" "mtgox_auth_key"
             authSecretScrambled <- get cp "DEFAULT" "mtgox_auth_secret"
-            safetyMarginF <- get cp "DEFAULT" "safety_margin"
+            safetyMarginBTCF <- get cp "DEFAULT" "safety_margin_btc"
+            safetyMarginUSDF <- get cp "DEFAULT" "safety_margin_usd"
+            mtgoxMinimalOrderBTCF <- get cp "DEFAULT" "mtgox_minimal_order_btc"
             notifyFile <- get cp "DEFAULT" "bitcoind_notify_file"
             markerAddresses <- get cp "DEFAULT" "marker_addresses"
             let authKey = B8.pack $
                             unScrambleText authKeyScrambled hardcodedKeyA
                 authSecret = B8.pack $
                                 unScrambleText authSecretScrambled hardcodedKeyB
-                safetyMargin = round $ (safetyMarginF :: Double) * 10 ^ (8 :: Integer)
+                safetyMarginBTC =
+                    round $ (safetyMarginBTCF :: Double) * 10 ^ (8 :: Integer)
+                safetyMarginUSD =
+                    round $ (safetyMarginUSDF :: Double) * 10 ^ (5 :: Integer)
+                mtgoxMinimalOrderBTC =
+                    round $ (mtgoxMinimalOrderBTCF :: Double)
+                                * 10 ^ (8 :: Integer)
             return $ BridgewalkerConfig
                         { bcRPCAuth = rpcAuth
-                        , bcMtGoxCredentials = initMtGoxCredentials authKey authSecret
-                        , bcSafetyMargin = safetyMargin
+                        , bcMtGoxCredentials =
+                            initMtGoxCredentials authKey authSecret
+                        , bcSafetyMarginBTC = safetyMarginBTC
+                        , bcSafetyMarginUSD = safetyMarginUSD
+                        , bcMtGoxMinimalOrderBTC = mtgoxMinimalOrderBTC
                         , bcNotifyFile = notifyFile
-                        , bcMarkerAddresses = adjustMarkerAddresses (read markerAddresses)
+                        , bcMarkerAddresses =
+                            adjustMarkerAddresses (read markerAddresses)
                         }
     case v of
         Left msg -> error $ "Reading the configuration failed " ++ show msg

@@ -19,6 +19,14 @@ data LogContent = RebalancerFailure { lcInfo :: String }
                                    , lcInfo :: String
                                    }
                 | RebalancerAction { lcInfo :: String }
+                | DepositProcessed { lcAccount :: String
+                                   , lcInfo :: String
+                                   }
+                | BTCSold { lcAccount :: String
+                          , lcInfo :: String
+                          }
+                | MtGoxLowBTCBalance { lcInfo :: String }
+                | MtGoxError { lcInfo :: String }
                 | LogMisc { lcInfo :: String }
                 deriving (Generic, Show)
 

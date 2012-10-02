@@ -80,10 +80,7 @@ runRebalancer rbHandle = do
     rd <- readMVar (unRH rbHandle)
     hAR <- hasActedRecently (rbTimestamp rd)
     if hAR
-        then let logger = rbAppLogger rd
-                 msg = RebalancerFailure
-                        "Rebalancer called too often; returning early."
-             in logger msg
+        then return ()
         else do
             log <- runRebalancer' (rbAppLogger rd) (rbWatchdogLogger rd)
                                     (rbRPCAuth rd) (rbMtGoxAPIHandles rd)

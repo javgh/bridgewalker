@@ -16,6 +16,7 @@ import qualified Data.ByteString.Base64 as B64
 
 import AddressUtils
 import Config
+import ConfigTypes
 import Rebalancer
 import LoggingUtils
 import PendingActionsTracker
@@ -74,6 +75,11 @@ periodicRebalancing rbHandle = forever $ do
     runRebalancer rbHandle
     threadDelay $ 5 * 10 ^ (6 :: Integer)
 
+periodicNudging :: PendingActionsTrackerHandle -> IO ()
+periodicNudging patHandle = forever $ do
+    nudgePendingActionsTracker patHandle
+    threadDelay $ 60 * 10 ^ (6 :: Integer)
+
 initBridgewalkerHandles :: B.ByteString -> IO BridgewalkerHandles
 initBridgewalkerHandles connectInfo = do
     appLogger <- initLogger
@@ -86,15 +92,23 @@ initBridgewalkerHandles connectInfo = do
     fbetHandle <- initFilteredBitcoinEventTask Nothing (bcRPCAuth bwConfig)
                     (bcNotifyFile bwConfig) acceptAfterThreeConfs fetState
     rbHandle <- initRebalancer appLogger Nothing (bcRPCAuth bwConfig)
-                                    mtgoxHandles (bcSafetyMargin bwConfig)
+                                    mtgoxHandles (bcSafetyMarginBTC bwConfig)
     _ <- forkIO $ periodicRebalancing rbHandle
-    return $ BridgewalkerHandles { bhAppLogger = appLogger
-                                 , bhConfig = bwConfig
-                                 , bhDBConn = dbConn
-                                 , bhMtGoxHandles = mtgoxHandles
-                                 , bhFilteredBitcoinEventTaskHandle = fbetHandle
-                                 , bhRebalancerHandle = rbHandle
-                                 }
+    let tempBWHandles =
+            BridgewalkerHandles { bhAppLogger = appLogger
+                                , bhConfig = bwConfig
+                                , bhDBConn = dbConn
+                                , bhMtGoxHandles = mtgoxHandles
+                                , bhFilteredBitcoinEventTaskHandle = fbetHandle
+                                , bhRebalancerHandle = rbHandle
+                                , bhPendingActionsTrackerHandle =
+                                    error "PendingActionsTracker was accessed,\
+                                          \ but not initialized yet."
+                                }
+    patHandle <- initPendingActionsTracker readPendingActionsStateFromDB
+                    writePendingActionsStateToDB tempBWHandles
+    _ <- forkIO $ periodicNudging patHandle
+    return $ tempBWHandles { bhPendingActionsTrackerHandle = patHandle }
 
 justCatchUp :: BridgewalkerHandles -> IO ()
 justCatchUp bwHandles =
@@ -145,24 +159,18 @@ actOnDeposits :: BridgewalkerHandles -> IO ()
 actOnDeposits bwHandles =
     let fbetHandle = bhFilteredBitcoinEventTaskHandle bwHandles
         dbConn = bhDBConn bwHandles
+        patHandle = bhPendingActionsTrackerHandle bwHandles
     in forever $ do
         (fetState, fEvents) <- waitForFilteredBitcoinEvents fbetHandle
-        print "--- fEvents"
-        mapM_ print fEvents
         let actions = concatMap convertToActions fEvents
-        print "--- actions"
-        print actions
         withTransaction dbConn $ do     -- atomic transaction: do not update
                                         -- fetState, before recording necessary
                                         -- actions to be done as a result
             paState <- readPendingActionsStateFromDB dbConn
-            print paState
             let paState' = addPendingActions paState actions
             writeBitcoindStateToDB dbConn fetState
-            print "--- new paState"
-            print paState'
-            print "--- ---"
             writePendingActionsStateToDB dbConn paState'
+        nudgePendingActionsTracker patHandle
   where
     convertToActions fTx@FilteredNewTransaction{} =
         let amount = adjustAmount . tAmount . fntTx $ fTx
