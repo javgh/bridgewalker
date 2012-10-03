@@ -26,6 +26,7 @@ main = connectPostgreSQL myConnectInfo >>= \conn -> do
         ("pendingactionsstate" :: B.ByteString, paStateStr)
     execute_ conn
         "create table accounts ( account_nr integer primary key\
-                               \, btc_balance integer\
+                               \, btc_in integer\
+                               \, btc_out integer\
                                \, usd_balance integer)"
     return ()

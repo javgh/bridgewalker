@@ -25,6 +25,9 @@ data LogContent = RebalancerFailure { lcInfo :: String }
                 | BTCSold { lcAccount :: Integer
                           , lcInfo :: String
                           }
+                | BTCBought { lcAccount :: Integer
+                            , lcInfo :: String
+                            }
                 | MtGoxLowBTCBalance { lcInfo :: String }
                 | MtGoxError { lcInfo :: String }
                 | LogMisc { lcInfo :: String }

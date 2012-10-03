@@ -63,6 +63,10 @@ data BridgewalkerAction = DepositAction { baAmount :: Integer
                         | SellBTCAction { baAmount :: Integer
                                         , baAccount :: BridgewalkerAccount
                                         }
+                        | BuyBTCAction { baAmount :: Integer
+                                       , baAddress :: RPC.BitcoinAddress
+                                       , baAccount :: BridgewalkerAccount
+                                       }
                         | PauseAction { baExpiration :: UTCTime }
                         -- TODO: more actions
                         deriving (Show, Generic)
@@ -116,6 +120,8 @@ processOneAction bwHandles action paState' = do
             processDeposit bwHandles amount address
         SellBTCAction amount account ->
             sellBTC bwHandles amount account
+        BuyBTCAction amount address account ->
+            buyBTC bwHandles amount address account
         PauseAction expiration ->
             checkPause expiration
     case modification of
@@ -151,14 +157,14 @@ processDeposit bwHandles amount address =
     let dbConn = bhDBConn bwHandles
         logger = bhAppLogger bwHandles
         minimalOrderBTC = bcMtGoxMinimalOrderBTC . bhConfig $ bwHandles
-        magicAddress = RPC.BitcoinAddress "13NsGekvJKyGTeteu6fjyTxKbpkBox58j8"
+        magicAddress = RPC.BitcoinAddress "177TbyFpEmG2mLpFf4em7jpUtpR36TTWjq"
         magicAccount = 1 :: Integer
     in if adjustAddr address == magicAddress
         then do
-            btcBalance <- getBTCBalance dbConn magicAccount
+            btcBalance <- getBTCInBalance dbConn magicAccount
             let newBalance = btcBalance + amount
             execute dbConn
-                        "update accounts set btc_balance=? where account_nr=?"
+                        "update accounts set btc_in=? where account_nr=?"
                         (newBalance, magicAccount)
             let logMsg = DepositProcessed
                             { lcAccount = magicAccount
@@ -209,11 +215,11 @@ sellBTC bwHandles amount bwAccount = do
                                     \ reserves is completed."
         Right stats -> do
             let usdAmount = max 0 (usdEarned stats - usdFee stats)
-            btcBalance <- getBTCBalance dbConn account
+            btcBalance <- getBTCInBalance dbConn account
             usdBalance <- getUSDBalance dbConn account
             let newBTCBalance = max 0 (btcBalance - amount)
                 newUSDBalance = usdBalance + usdAmount
-            execute dbConn "update accounts set btc_balance=?, usd_balance=?\
+            execute dbConn "update accounts set btc_in=?, usd_balance=?\
                                 \ where account_nr=?"
                                 (newBTCBalance, newUSDBalance, account)
             let logMsg = BTCSold
@@ -228,6 +234,79 @@ sellBTC bwHandles amount bwAccount = do
             logger logMsg
             return RemoveAction
 
+buyBTC :: BridgewalkerHandles-> Integer-> t-> BridgewalkerAccount-> IO PendingActionsStateModification
+buyBTC bwHandles amount address bwAccount = do
+    let mtgoxHandles = bhMtGoxHandles bwHandles
+        depthStoreHandle = mtgoxDepthStoreHandle mtgoxHandles
+        safetyMarginUSD = bcSafetyMarginUSD . bhConfig $ bwHandles
+        logger = bhAppLogger bwHandles
+        dbConn = bhDBConn bwHandles
+        account = bAccount $ bwAccount
+    -- TODO: check for minimal BTC amount
+    print "in buyBTC - before simulateBTCBuy"
+    usdAmountM <- simulateBTCBuy depthStoreHandle amount
+    print "after simulateBTCBuy"
+    case usdAmountM of
+        Nothing -> do
+            let logMsg = MtGoxError
+                            { lcInfo = "Stale data from depth store while\
+                                       \ trying to calculate USD value of\
+                                       \ BTC buy order." }
+            logger logMsg
+            return $ AddPauseAction "Communication problems with Mt.Gox\
+                                    \ - pausing until it is resolved."
+        Just usdAmount -> do
+            usdBalance <- getUSDBalance dbConn account
+            -- TODO: take fees into account
+            if usdAmount > usdBalance
+                then return RemoveAction    -- TODO: figure out way in which to inform user;
+                                            --       probably via transaction log
+                else do
+                    buy <- tryToExecuteBuyOrder mtgoxHandles safetyMarginUSD
+                                amount usdAmount
+                    processBuyResult logger dbConn account amount buy
+
+processBuyResult :: Logger-> Connection-> Integer-> Integer-> Either SellOrderProblem OrderStats-> IO PendingActionsStateModification
+processBuyResult logger dbConn account btcAmount buy = do
+    case buy of
+        Left (MtGoxCallError msg) -> do
+            let logMsg = MtGoxError
+                            { lcInfo = "Error communicating with Mt.Gox while\
+                                       \ attempting to buy BTC. Error was: \
+                                       \ " ++ msg }
+            logger logMsg
+            return $ AddPauseAction "Communication problems with Mt.Gox\
+                                    \ - pausing until it is resolved."
+        Left MtGoxLowBalance -> do
+            let logMsg = MtGoxLowBTCBalance
+                        { lcInfo = "Postponing BTC buy order because of low\
+                                   \ balance in Mt.Gox account." }
+            logger logMsg
+            return $ AddPauseAction "Hot wallet is running low - pausing\
+                                    \ until resolved via cold reserves."
+        Right stats -> do
+            let usdAmount = usdSpent stats + usdFee stats
+            btcBalance <- getBTCOutBalance dbConn account
+            usdBalance <- getUSDBalance dbConn account
+            -- TODO: deal with case when usdAmount does end up lower
+            --       than usdBalance, because things changed last minute
+            let newBTCBalance = btcBalance + btcAmount
+                newUSDBalance = max 0 (usdBalance - usdAmount)
+            execute dbConn "update accounts set btc_out=?, usd_balance=?\
+                                \ where account_nr=?"
+                                (newBTCBalance, newUSDBalance, account)
+            let logMsg = BTCBought
+                            { lcAccount = account
+                            , lcInfo = show btcAmount
+                                        ++ " BTC bought on Mt.Gox and subtracted "
+                                        ++ show usdAmount ++ " USD from account "
+                                        ++ show account ++ " - balance is now "
+                                        ++ show newUSDBalance ++ " USD and "
+                                        ++ show newBTCBalance ++ " BTC."
+                            }
+            logger logMsg
+            return RemoveAction -- TODO: add send action here
+
 tryToExecuteSellOrder :: MtGoxAPIHandles-> Integer -> Integer -> IO (Either SellOrderProblem OrderStats)
 tryToExecuteSellOrder mtgoxHandles safetyMarginBTC amount = runEitherT $ do
     privateInfo <- noteT (MtGoxCallError "Unable to call getPrivateInfoR.")
@@ -235,19 +314,39 @@ tryToExecuteSellOrder mtgoxHandles safetyMarginBTC amount = runEitherT $ do
     _ <- tryAssert MtGoxLowBalance
             (piBtcBalance privateInfo >= amount + safetyMarginBTC) ()
     orderStats <- EitherT $
-        adjustError <$> callHTTPApi mtgoxHandles submitOrder
-                            OrderTypeSellBTC (adjustAmount amount)
+        adjustMtGoxError <$> callHTTPApi mtgoxHandles submitOrder
+                                OrderTypeSellBTC amount
     return orderStats
-  where
-    adjustError (Left err) = Left (MtGoxCallError err)
-    adjustError (Right result) = Right result
 
-getBTCBalance :: Connection -> Integer -> IO Integer
-getBTCBalance dbConn account = do
+tryToExecuteBuyOrder :: MtGoxAPIHandles-> Integer-> Integer-> Integer-> IO (Either SellOrderProblem OrderStats)
+tryToExecuteBuyOrder mtgoxHandles safetyMarginUSD amountBTC amountUSD = runEitherT $ do
+    privateInfo <- noteT (MtGoxCallError "Unable to call getPrivateInfoR.")
+                    . MaybeT $ callHTTPApi mtgoxHandles getPrivateInfoR
+    _ <- tryAssert MtGoxLowBalance
+            (piUsdBalance privateInfo >= amountUSD + safetyMarginUSD) ()
+    orderStats <- EitherT $
+        adjustMtGoxError <$> callHTTPApi mtgoxHandles submitOrder
+                                OrderTypeBuyBTC amountBTC
+    return orderStats
+
+adjustMtGoxError (Left err) = Left (MtGoxCallError err)
+adjustMtGoxError (Right result) = Right result
+
+getBTCInBalance :: Connection -> Integer -> IO Integer
+getBTCInBalance dbConn account = do
     let errMsg = "Expected to find account " ++ show account
-                    ++ " while doing getBTCBalance, but failed."
+                    ++ " while doing getBTCInBalance, but failed."
     Only balance <- expectOneRow errMsg <$>
-        query dbConn "select btc_balance from accounts where account_nr=?"
+        query dbConn "select btc_in from accounts where account_nr=?"
+                        (Only account)
+    return balance
+
+getBTCOutBalance :: Connection -> Integer -> IO Integer
+getBTCOutBalance dbConn account = do
+    let errMsg = "Expected to find account " ++ show account
+                    ++ " while doing getBTCOutBalance, but failed."
+    Only balance <- expectOneRow errMsg <$>
+        query dbConn "select btc_out from accounts where account_nr=?"
                         (Only account)
     return balance
 
