@@ -47,7 +47,8 @@ initBridgewalkerHandles connectInfo = do
     dbConn <- connectPostgreSQL connectInfo
     fetState <- readBitcoindStateFromDB dbConn >>= \s
                     -> return $ updateMarkerAddresses s maConfig
-    mtgoxHandles <- initMtGoxAPI Nothing (bcMtGoxCredentials bwConfig)
+    mtgoxHandles <- initMtGoxAPI Nothing(bcMtGoxCredentials bwConfig)
+                                    SkipFullDepth
     fbetHandle <- initFilteredBitcoinEventTask Nothing (bcRPCAuth bwConfig)
                     (bcNotifyFile bwConfig) acceptAfterThreeConfs fetState
     rbHandle <- initRebalancer appLogger Nothing (bcRPCAuth bwConfig)

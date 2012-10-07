@@ -27,6 +27,5 @@ main = connectPostgreSQL myConnectInfo >>= \conn -> do
     execute_ conn
         "create table accounts ( account_nr integer primary key\
                                \, btc_in integer\
-                               \, btc_out integer\
                                \, usd_balance integer)"
     return ()

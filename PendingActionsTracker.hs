@@ -67,6 +67,10 @@ data BridgewalkerAction = DepositAction { baAmount :: Integer
                                        , baAddress :: RPC.BitcoinAddress
                                        , baAccount :: BridgewalkerAccount
                                        }
+                        | SendBTCAction { baAmount :: Integer
+                                        , baAddress :: RPC.BitcoinAddress
+                                        , baAccount :: BridgewalkerAccount
+                                        }
                         | PauseAction { baExpiration :: UTCTime }
                         -- TODO: more actions
                         deriving (Show, Generic)
@@ -122,6 +126,8 @@ processOneAction bwHandles action paState' = do
             sellBTC bwHandles amount account
         BuyBTCAction amount address account ->
             buyBTC bwHandles amount address account
+        SendBTCAction amount address account ->
+            sendBTC bwHandles amount address account
         PauseAction expiration ->
             checkPause expiration
     case modification of
@@ -234,7 +240,7 @@ sellBTC bwHandles amount bwAccount = do
             logger logMsg
             return RemoveAction
 
-buyBTC :: BridgewalkerHandles-> Integer-> t-> BridgewalkerAccount-> IO PendingActionsStateModification
+buyBTC :: BridgewalkerHandles-> Integer-> RPC.BitcoinAddress-> BridgewalkerAccount-> IO PendingActionsStateModification
 buyBTC bwHandles amount address bwAccount = do
     let mtgoxHandles = bhMtGoxHandles bwHandles
         depthStoreHandle = mtgoxDepthStoreHandle mtgoxHandles
@@ -243,9 +249,7 @@ buyBTC bwHandles amount address bwAccount = do
         dbConn = bhDBConn bwHandles
         account = bAccount $ bwAccount
     -- TODO: check for minimal BTC amount
-    print "in buyBTC - before simulateBTCBuy"
     usdAmountM <- simulateBTCBuy depthStoreHandle amount
-    print "after simulateBTCBuy"
     case usdAmountM of
         Nothing -> do
             let logMsg = MtGoxError
@@ -264,10 +268,11 @@ buyBTC bwHandles amount address bwAccount = do
                 else do
                     buy <- tryToExecuteBuyOrder mtgoxHandles safetyMarginUSD
                                 amount usdAmount
-                    processBuyResult logger dbConn account amount buy
+                    processBuyResult logger dbConn bwAccount amount address buy
 
-processBuyResult :: Logger-> Connection-> Integer-> Integer-> Either SellOrderProblem OrderStats-> IO PendingActionsStateModification
-processBuyResult logger dbConn account btcAmount buy = do
+processBuyResult :: Logger-> Connection-> BridgewalkerAccount-> Integer-> RPC.BitcoinAddress-> Either SellOrderProblem OrderStats-> IO PendingActionsStateModification
+processBuyResult logger dbConn bwAccount btcAmount address buy = do
+    let account = bAccount $ bwAccount
     case buy of
         Left (MtGoxCallError msg) -> do
             let logMsg = MtGoxError
@@ -286,26 +291,87 @@ processBuyResult logger dbConn account btcAmount buy = do
                                     \ until resolved via cold reserves."
         Right stats -> do
             let usdAmount = usdSpent stats + usdFee stats
-            btcBalance <- getBTCOutBalance dbConn account
             usdBalance <- getUSDBalance dbConn account
             -- TODO: deal with case when usdAmount does end up lower
             --       than usdBalance, because things changed last minute
-            let newBTCBalance = btcBalance + btcAmount
-                newUSDBalance = max 0 (usdBalance - usdAmount)
-            execute dbConn "update accounts set btc_out=?, usd_balance=?\
+            let newUSDBalance = max 0 (usdBalance - usdAmount)
+            execute dbConn "update accounts set usd_balance=?\
                                 \ where account_nr=?"
-                                (newBTCBalance, newUSDBalance, account)
+                                (newUSDBalance, account)
             let logMsg = BTCBought
                             { lcAccount = account
                             , lcInfo = show btcAmount
                                         ++ " BTC bought on Mt.Gox and subtracted "
                                         ++ show usdAmount ++ " USD from account "
                                         ++ show account ++ " - balance is now "
-                                        ++ show newUSDBalance ++ " USD and "
-                                        ++ show newBTCBalance ++ " BTC."
+                                        ++ show newUSDBalance ++ " USD."
                             }
             logger logMsg
-            return RemoveAction -- TODO: add send action here
+            let action = SendBTCAction { baAmount = btcAmount
+                                       , PendingActionsTracker.baAddress
+                                            = address
+                                       , baAccount = bwAccount
+                                       }
+            return $ ReplaceAction action
+
+sendBTC :: BridgewalkerHandles-> Integer-> RPC.BitcoinAddress-> BridgewalkerAccount-> IO PendingActionsStateModification
+sendBTC bwHandles amount address bwAccount = do
+    let rpcAuth = bcRPCAuth . bhConfig $ bwHandles
+        safetyMarginBTC = bcSafetyMarginBTC . bhConfig $ bwHandles
+        logger = bhAppLogger bwHandles
+        account = bAccount $ bwAccount
+        mLogger = Nothing   -- TODO: find better solution for watchdog logger
+    btcSystemBalance <- RPC.getBalanceR mLogger rpcAuth
+                                            confsNeededForSending True
+    if (amount + safetyMarginBTC <= adjustAmount btcSystemBalance)
+        then do
+            result <- RPC.sendToAddress rpcAuth address (adjustAmount amount)
+            case result of
+                Left networkOrParseError -> do
+                    let logMsg = BTCSendNetworkOrParseError
+                                    { lcAccount = account
+                                    , lcAddress =
+                                        T.unpack . RPC.btcAddress $ address
+                                    , lcAmount = amount
+                                    , lcInfo = networkOrParseError
+                                    }
+                    logger logMsg
+                    return RemoveAction
+                Right result' -> do
+                    case result' of
+                        Left sendError -> do
+                            let logMsg = BTCSendError
+                                            { lcAccount = account
+                                            , lcAddress =
+                                                T.unpack . RPC.btcAddress
+                                                                    $ address
+                                            , lcAmount = amount
+                                            , lcInfo = show sendError
+                                            }
+                            logger logMsg
+                            return RemoveAction
+                        Right txID -> do
+                            let logMsg = BTCSent
+                                            { lcAccount = account
+                                            , lcInfo = "Account "
+                                                ++ show account ++ " sent out "
+                                                ++ show amount ++ " BTC to "
+                                                ++ (T.unpack . RPC.btcAddress
+                                                                    $ address)
+                                                ++ " with transaction "
+                                                ++ (T.unpack . RPC.btcTxID
+                                                                    $ txID)
+                                                ++ "."
+                                            }
+                            logger logMsg
+                            return RemoveAction
+        else do
+            let logMsg = BitcoindLowBTCBalance
+                        { lcInfo = "Postponing BTC send action because of low\
+                                   \ local BTC balance." }
+            logger logMsg
+            return $ AddPauseAction "Pausing until rebalancing of\
+                                    \ reserves is completed."
 
 tryToExecuteSellOrder :: MtGoxAPIHandles-> Integer -> Integer -> IO (Either SellOrderProblem OrderStats)
 tryToExecuteSellOrder mtgoxHandles safetyMarginBTC amount = runEitherT $ do
@@ -338,15 +404,6 @@ getBTCInBalance dbConn account = do
                     ++ " while doing getBTCInBalance, but failed."
     Only balance <- expectOneRow errMsg <$>
         query dbConn "select btc_in from accounts where account_nr=?"
-                        (Only account)
-    return balance
-
-getBTCOutBalance :: Connection -> Integer -> IO Integer
-getBTCOutBalance dbConn account = do
-    let errMsg = "Expected to find account " ++ show account
-                    ++ " while doing getBTCOutBalance, but failed."
-    Only balance <- expectOneRow errMsg <$>
-        query dbConn "select btc_out from accounts where account_nr=?"
                         (Only account)
     return balance
 

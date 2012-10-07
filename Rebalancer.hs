@@ -22,12 +22,10 @@ import qualified Control.Exception as E
 
 import AddressUtils
 import LoggingUtils
+import ConfigTypes
 
 smallestCoin :: Integer
 smallestCoin = 1000000
-
-confsNeededForSending :: Integer
-confsNeededForSending = 3
 
 timeBetweenActions = 60     -- minimal time between rebalancer actions
 

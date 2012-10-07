@@ -30,6 +30,21 @@ data LogContent = RebalancerFailure { lcInfo :: String }
                             }
                 | MtGoxLowBTCBalance { lcInfo :: String }
                 | MtGoxError { lcInfo :: String }
+                | BitcoindLowBTCBalance { lcInfo :: String }
+                | BTCSent { lcAccount :: Integer
+                          , lcInfo :: String
+                          }
+                | BTCSendNetworkOrParseError
+                    { lcAccount :: Integer
+                    , lcAddress :: String
+                    , lcAmount :: Integer
+                    , lcInfo :: String
+                    }
+                | BTCSendError { lcAccount :: Integer
+                               , lcAddress :: String
+                               , lcAmount :: Integer
+                               , lcInfo :: String
+                               }
                 | LogMisc { lcInfo :: String }
                 deriving (Generic, Show)
 
