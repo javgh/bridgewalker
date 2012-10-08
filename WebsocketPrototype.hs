@@ -2,7 +2,7 @@
 module WebsocketPrototype where
 
 import Control.Applicative
-import Control.Concurrent (MVar, newMVar, modifyMVar_, readMVar)
+import Control.Concurrent
 import Control.Exception (fromException)
 import Control.Monad
 import Control.Monad.IO.Class (liftIO)
@@ -30,21 +30,32 @@ myConnectInfo :: B.ByteString
 myConnectInfo = "dbname=bridgewalker"
 
 data ClientStatus = ClientStatus { csUSDBalance :: Integer }
+                    deriving (Show)
 
 data WebsocketCommand = WSRequestStatus { wcSessionID :: T.Text
                                         , wcStatusHash :: Maybe T.Text
                                         }
+                      | WSSendBTC { wcSessionID :: T.Text
+                                  , wcBitcoinAddress :: T.Text
+                                  , wcAmount :: Integer
+                                  }
+                      deriving (Show)
 
 data WebsocketReply = WSStatusReply { wrStatus :: ClientStatus
                                     , wrStatusHash :: T.Text
                                     }
+                    | WSStatusUnchangedReply
                     | WSCommandNotUnderstood { wrInfo :: T.Text }
+                    deriving (Show)
 
 instance FromJSON WebsocketCommand
   where
     parseJSON (Object o) = case H.lookup "op" o of
         Just "status" -> WSRequestStatus <$> o .: "session_id"
                                          <*> o .:? "status_hash"
+        Just "send_btc" -> WSSendBTC <$> o .: "session_id"
+                                     <*> o .: "bitcoin_address"
+                                     <*> o .: "amount"
         Just _ -> mzero
         Nothing -> mzero
     parseJSON _ = mzero
@@ -62,6 +73,8 @@ instance ToJSON WebsocketReply
                , "status" .= status
                , "status_hash" .= statusHash
                ]
+    toJSON WSStatusUnchangedReply =
+        object [ "reply" .= ("status_unchanged_reply" :: T.Text) ]
     toJSON (WSCommandNotUnderstood info) =
         object [ "reply" .= ("not_understood" :: T.Text)
                , "info" .= info
@@ -83,13 +96,51 @@ toStrict = B.concat . BL.toChunks
 prepareWSReply :: ToJSON a => a -> T.Text
 prepareWSReply = T.decodeUtf8 . toStrict . encode
 
+parseWSCommand :: FromJSON b => T.Text -> Either String b
+parseWSCommand cmd =
+    let parse = AP.parseOnly (fromJSON <$> json) $ T.encodeUtf8 cmd
+    in case parse of
+        Left _ -> Left "Malformed JSON"
+        Right (Error _) -> Left "Malformed command"
+        Right (Success d) -> Right d
+
 webSocketApp :: Connection -> WS.Request -> WS.WebSockets WS.Hybi00 ()
 webSocketApp dbConn rq = do
     WS.acceptRequest rq
+    forever $ processMessages dbConn
+
+processMessages dbConn = do
     msg <- WS.receiveData
-    liftIO $ print (msg :: T.Text)
-    WS.sendTextData $
-        prepareWSReply (WSCommandNotUnderstood "not implemented yet")
+    let cmd = parseWSCommand msg :: Either String WebsocketCommand
+    case parseWSCommand msg of
+        Left errMsg ->
+            WS.sendTextData . prepareWSReply $
+                                    WSCommandNotUnderstood (T.pack errMsg)
+        Right cmd -> case cmd of
+            WSRequestStatus _ _ -> do   -- TODO: check hash
+                usdBalance <- liftIO $ getUSDBalance dbConn 1
+                let status = ClientStatus usdBalance
+                    reply = WSStatusReply { wrStatus = status
+                                          , wrStatusHash = "TODO"
+                                          }
+                WS.sendTextData . prepareWSReply $ reply
+            WSSendBTC _ address amount -> do
+                -- TODO: check validity of Bitcoin address
+                -- TODO: protect against negative or too large amounts
+                --       (probably need to modify DepthStore to signal
+                --        when amount can not be fulfilled)
+                let action = BuyBTCAction
+                                { baAmount = amount
+                                , baAddress =
+                                    RPC.BitcoinAddress address
+                                , baAccount = BridgewalkerAccount 1
+                                }
+                liftIO $ addBuyAction dbConn action
+
+addBuyAction dbConn action = withTransaction dbConn $ do
+    paState <- readPendingActionsStateFromDB dbConn
+    let paState' = addPendingActions paState [action]
+    writePendingActionsStateToDB dbConn paState'
 
 main = do
     dbConn <- connectPostgreSQL myConnectInfo

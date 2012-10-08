@@ -9,6 +9,12 @@
     <body>
         <h1>Haskell WebSockets example</h1>
         <div id="main">
+            <div id="balance">0 USD</div>
+            <form id="send-form" action="javascript: void(0)">
+                <label for="user">Address: </label>
+                <input id="address" type="text" size="60" />
+                <input id="button" type="submit" value="Send 0.01 BTC" />
+            </form>
             <div id="messages">
             </div>
         </div>
