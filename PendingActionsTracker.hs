@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings #-}
 module PendingActionsTracker
     ( PendingActionsState
     , BridgewalkerAccount(..)
@@ -15,9 +15,7 @@ import Control.Error
 import Control.Monad
 import Database.PostgreSQL.Simple
 import Data.List
-import Data.Serialize
 import Data.Time.Clock
-import GHC.Generics
 import Network.MtGoxAPI
 
 import qualified Data.Text as T
@@ -25,18 +23,13 @@ import qualified Network.BitcoinRPC as RPC
 import qualified Data.Sequence as S
 
 import AddressUtils
+import CommonTypes
 import Config
-import ConfigTypes
+import DbUtils
 import LoggingUtils
 
 pauseInterval :: NominalDiffTime
 pauseInterval = 60  -- pauses are 60 seconds long
-
-data PendingActionsState = PendingActionsState
-                                { pasSequence :: S.Seq BridgewalkerAction
-                                , pasStatus :: String
-                                }
-                           deriving (Show, Generic)
 
 data PendingActionsStateModification = RemoveAction
                                      | ReplaceAction BridgewalkerAction
@@ -44,9 +37,6 @@ data PendingActionsStateModification = RemoveAction
                                      | KeepAction
                                      | AddPauseAction String
                                         -- parameter describes reason for pause
-
-data BridgewalkerAccount = BridgewalkerAccount { bAccount :: Integer }
-                           deriving (Generic, Show)
 
 data WithdrawalType = WithdrawBTC { wtAmount :: Integer }
                     | WithdrawUSD { wtAmount :: Integer }
@@ -57,31 +47,7 @@ data WithdrawalAction = WithdrawalAction { waAddress :: RPC.BitcoinAddress
                                          }
                         deriving (Show)
 
-data BridgewalkerAction = DepositAction { baAmount :: Integer
-                                        , baAddress :: RPC.BitcoinAddress
-                                        }
-                        | SellBTCAction { baAmount :: Integer
-                                        , baAccount :: BridgewalkerAccount
-                                        }
-                        | BuyBTCAction { baAmount :: Integer
-                                       , baAddress :: RPC.BitcoinAddress
-                                       , baAccount :: BridgewalkerAccount
-                                       }
-                        | SendBTCAction { baAmount :: Integer
-                                        , baAddress :: RPC.BitcoinAddress
-                                        , baAccount :: BridgewalkerAccount
-                                        }
-                        | PauseAction { baExpiration :: UTCTime }
-                        -- TODO: more actions
-                        deriving (Show, Generic)
-
 data SellOrderProblem = MtGoxLowBalance | MtGoxCallError String
-
-instance Serialize BridgewalkerAccount
-
-instance Serialize BridgewalkerAction
-
-instance Serialize PendingActionsState
 
 initialPendingActionsState :: PendingActionsState
 initialPendingActionsState = PendingActionsState { pasSequence = S.empty
@@ -163,7 +129,7 @@ processDeposit bwHandles amount address =
     let dbConn = bhDBConn bwHandles
         logger = bhAppLogger bwHandles
         minimalOrderBTC = bcMtGoxMinimalOrderBTC . bhConfig $ bwHandles
-        magicAddress = RPC.BitcoinAddress "177TbyFpEmG2mLpFf4em7jpUtpR36TTWjq"
+        magicAddress = RPC.BitcoinAddress "17cWnmBb4b8EMrHhSiasMXsbsc1ru7iTGj"
         magicAccount = 1 :: Integer
     in if adjustAddr address == magicAddress
         then do
@@ -308,7 +274,7 @@ processBuyResult logger dbConn bwAccount btcAmount address buy = do
                             }
             logger logMsg
             let action = SendBTCAction { baAmount = btcAmount
-                                       , PendingActionsTracker.baAddress
+                                       , CommonTypes.baAddress
                                             = address
                                        , baAccount = bwAccount
                                        }
@@ -397,28 +363,6 @@ tryToExecuteBuyOrder mtgoxHandles safetyMarginUSD amountBTC amountUSD = runEithe
 
 adjustMtGoxError (Left err) = Left (MtGoxCallError err)
 adjustMtGoxError (Right result) = Right result
-
-getBTCInBalance :: Connection -> Integer -> IO Integer
-getBTCInBalance dbConn account = do
-    let errMsg = "Expected to find account " ++ show account
-                    ++ " while doing getBTCInBalance, but failed."
-    Only balance <- expectOneRow errMsg <$>
-        query dbConn "select btc_in from accounts where account_nr=?"
-                        (Only account)
-    return balance
-
-getUSDBalance :: Connection -> Integer -> IO Integer
-getUSDBalance dbConn account = do
-    let errMsg = "Expected to find account " ++ show account
-                    ++ " while doing getUSDBalance, but failed."
-    Only balance <- expectOneRow errMsg <$>
-        query dbConn "select usd_balance from accounts where account_nr=?"
-                        (Only account)
-    return balance
-
-expectOneRow :: String -> [a] -> a
-expectOneRow errMsg [] = error errMsg
-expectOneRow _ (x:_) = x
 
 popPendingAction :: PendingActionsState-> Maybe (BridgewalkerAction, PendingActionsState)
 popPendingAction state =

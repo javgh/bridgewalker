@@ -1,13 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
-import PendingActionsTracker
 import Database.PostgreSQL.Simple
 
 import qualified Data.ByteString as B
 import qualified Network.BitcoinRPC as RPC
 
 import DbUtils
+import PendingActionsTracker
 
 myConnectInfo :: B.ByteString
 myConnectInfo = "dbname=bridgewalker"

@@ -17,7 +17,7 @@ import System.FilePath
 import qualified Data.ByteString.Char8 as B8
 import qualified Data.Text as T
 
-import ConfigTypes
+import CommonTypes
 import LoggingUtils
 import Rebalancer
 import ScrambleCredentials

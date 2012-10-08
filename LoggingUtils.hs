@@ -11,6 +11,8 @@ import Data.Serialize
 import Data.Time
 import GHC.Generics
 
+import CommonTypes
+
 type Logger = LogContent -> IO ()
 
 data LogContent = RebalancerFailure { lcInfo :: String }
@@ -54,10 +56,6 @@ data LogEntry = LogEntry { _leTimestamp :: UTCTime
                 deriving (Generic, Show)
 
 instance Serialize LogContent
-
-instance Serialize UTCTime where
-    put = put . show
-    get = read <$> get
 
 instance Serialize LogEntry
 

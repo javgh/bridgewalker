@@ -15,8 +15,8 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Base64 as B64
 
 import AddressUtils
+import CommonTypes
 import Config
-import ConfigTypes
 import DbUtils
 import LoggingUtils
 import PendingActionsTracker

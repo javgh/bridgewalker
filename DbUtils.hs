@@ -4,6 +4,8 @@ module DbUtils
     , writeBitcoindStateToDB
     , readPendingActionsStateFromDB
     , writePendingActionsStateToDB
+    , getBTCInBalance
+    , getUSDBalance
     ) where
 
 import Control.Applicative
@@ -11,10 +13,10 @@ import Database.PostgreSQL.Simple
 import Data.Serialize
 import Network.BitcoinRPC.Events.MarkerAddresses
 
-import PendingActionsTracker
-
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Base64 as B64
+
+import CommonTypes
 
 readStateFromDB :: Connection -> B.ByteString -> IO B.ByteString
 readStateFromDB conn key = do
@@ -57,3 +59,25 @@ readPendingActionsStateFromDB conn = do
 expectRight :: Either String t -> t
 expectRight (Right r) = r
 expectRight (Left msg) = error msg
+
+getBTCInBalance :: Connection -> Integer -> IO Integer
+getBTCInBalance dbConn account = do
+    let errMsg = "Expected to find account " ++ show account
+                    ++ " while doing getBTCInBalance, but failed."
+    Only balance <- expectOneRow errMsg <$>
+        query dbConn "select btc_in from accounts where account_nr=?"
+                        (Only account)
+    return balance
+
+getUSDBalance :: Connection -> Integer -> IO Integer
+getUSDBalance dbConn account = do
+    let errMsg = "Expected to find account " ++ show account
+                    ++ " while doing getUSDBalance, but failed."
+    Only balance <- expectOneRow errMsg <$>
+        query dbConn "select usd_balance from accounts where account_nr=?"
+                        (Only account)
+    return balance
+
+expectOneRow :: String -> [a] -> a
+expectOneRow errMsg [] = error errMsg
+expectOneRow _ (x:_) = x

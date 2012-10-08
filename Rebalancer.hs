@@ -22,7 +22,7 @@ import qualified Control.Exception as E
 
 import AddressUtils
 import LoggingUtils
-import ConfigTypes
+import CommonTypes
 
 smallestCoin :: Integer
 smallestCoin = 1000000
