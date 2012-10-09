@@ -1,5 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
-module WebsocketPrototype where
+module WebsocketPrototype
+    ( runWebsocketServer
+    ) where
 
 import Control.Applicative
 import Control.Concurrent
@@ -23,14 +25,12 @@ import qualified Data.Text.IO as T
 import qualified Network.BitcoinRPC as RPC
 import qualified Network.WebSockets as WS
 
-import PendingActionsTracker
+import ClientHub
+import Config
 import DbUtils
+import PendingActionsTracker
 
-myConnectInfo :: B.ByteString
-myConnectInfo = "dbname=bridgewalker"
-
-data ClientStatus = ClientStatus { csUSDBalance :: Integer }
-                    deriving (Show)
+magicAccount = BridgewalkerAccount 1
 
 data WebsocketCommand = WSRequestStatus { wcSessionID :: T.Text
                                         , wcStatusHash :: Maybe T.Text
@@ -59,12 +59,6 @@ instance FromJSON WebsocketCommand
         Just _ -> mzero
         Nothing -> mzero
     parseJSON _ = mzero
-
-instance ToJSON ClientStatus
-  where
-    toJSON cs@ClientStatus{} =
-        let usdBalance = csUSDBalance cs
-        in object [ "usd_balance" .= usdBalance ]
 
 instance ToJSON WebsocketReply
   where
@@ -104,12 +98,14 @@ parseWSCommand cmd =
         Right (Error _) -> Left "Malformed command"
         Right (Success d) -> Right d
 
-webSocketApp :: Connection -> WS.Request -> WS.WebSockets WS.Hybi00 ()
-webSocketApp dbConn rq = do
+webSocketApp :: BridgewalkerHandles -> WS.Request -> WS.WebSockets WS.Hybi00 ()
+webSocketApp bwHandles rq = do
     WS.acceptRequest rq
-    forever $ processMessages dbConn
+    forever $ processMessages bwHandles
 
-processMessages dbConn = do
+processMessages bwHandles = do
+    let dbConn = bhDBConn bwHandles
+        patHandle = bhPendingActionsTrackerHandle bwHandles
     msg <- WS.receiveData
     let cmd = parseWSCommand msg :: Either String WebsocketCommand
     case parseWSCommand msg of
@@ -118,13 +114,13 @@ processMessages dbConn = do
                                     WSCommandNotUnderstood (T.pack errMsg)
         Right cmd -> case cmd of
             WSRequestStatus _ _ -> do   -- TODO: check hash
-                usdBalance <- liftIO $ getUSDBalance dbConn 1
-                let status = ClientStatus usdBalance
-                    reply = WSStatusReply { wrStatus = status
+                status <- liftIO $ compileClientStatus bwHandles magicAccount
+                let reply = WSStatusReply { wrStatus = status
                                           , wrStatusHash = "TODO"
                                           }
                 WS.sendTextData . prepareWSReply $ reply
             WSSendBTC _ address amount -> do
+                -- TODO: move functionality into ClientHub module
                 -- TODO: check validity of Bitcoin address
                 -- TODO: protect against negative or too large amounts
                 --       (probably need to modify DepthStore to signal
@@ -133,18 +129,19 @@ processMessages dbConn = do
                                 { baAmount = amount
                                 , baAddress =
                                     RPC.BitcoinAddress address
-                                , baAccount = BridgewalkerAccount 1
+                                , baAccount = magicAccount
                                 }
                 liftIO $ addBuyAction dbConn action
+                liftIO $ nudgePendingActionsTracker patHandle
 
 addBuyAction dbConn action = withTransaction dbConn $ do
     paState <- readPendingActionsStateFromDB dbConn
     let paState' = addPendingActions paState [action]
     writePendingActionsStateToDB dbConn paState'
 
-main = do
-    dbConn <- connectPostgreSQL myConnectInfo
-    WS.runServer "0.0.0.0" 9160 $ webSocketApp dbConn
+runWebsocketServer :: BridgewalkerHandles -> IO ()
+runWebsocketServer bwHandles =
+    WS.runServer "0.0.0.0" 9160 $ webSocketApp bwHandles
 
 
 --application :: MVar ServerState -> WS.Request -> WS.WebSockets WS.Hybi00 ()

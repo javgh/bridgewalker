@@ -5,6 +5,7 @@ module Config
     ) where
 
 import Control.Applicative
+import Control.Concurrent
 import Control.Monad.Error
 import Database.PostgreSQL.Simple
 import Data.ConfigFile
@@ -40,6 +41,8 @@ data BridgewalkerHandles = BridgewalkerHandles
                             , bhMtGoxHandles :: MtGoxAPIHandles
                             , bhFilteredBitcoinEventTaskHandle
                                 :: FilteredBitcoinEventTaskHandle
+                            , bhFilteredEventStateCopy
+                                :: MVar FilteredEventTaskState
                             , bhRebalancerHandle :: RebalancerHandle
                             , bhPendingActionsTrackerHandle
                                 :: PendingActionsTrackerHandle

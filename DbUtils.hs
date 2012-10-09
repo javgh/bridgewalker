@@ -6,6 +6,7 @@ module DbUtils
     , writePendingActionsStateToDB
     , getBTCInBalance
     , getUSDBalance
+    , getClientDBStatus
     ) where
 
 import Control.Applicative
@@ -77,6 +78,15 @@ getUSDBalance dbConn account = do
         query dbConn "select usd_balance from accounts where account_nr=?"
                         (Only account)
     return balance
+
+getClientDBStatus :: Connection -> Integer -> IO (Integer, Integer)
+getClientDBStatus dbConn account = do
+    let errMsg = "Expected to find account " ++ show account
+                    ++ " while doing getClientDBStatus, but failed."
+    (btcIn, usdBalance) <- expectOneRow errMsg <$>
+        query dbConn "select btc_in, usd_balance from accounts\
+                        \ where account_nr=?" (Only account)
+    return (btcIn, usdBalance)
 
 expectOneRow :: String -> [a] -> a
 expectOneRow errMsg [] = error errMsg

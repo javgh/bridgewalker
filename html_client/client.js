@@ -1,6 +1,5 @@
 function display_message(msg) {
-    var p = $(document.createElement('p')).text(msg);
-    $('#messages').append(p);
+    $('#messages').text(msg)
 }
 
 function request_status(ws) {
@@ -29,7 +28,7 @@ $(document).ready(function () {
     };
 
     ws.onmessage = function(event) {
-        //display_message(event.data);
+        display_message(event.data);
         msg = $.parseJSON(event.data);
 
         if (msg.reply == "status_reply") {

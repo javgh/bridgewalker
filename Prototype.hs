@@ -21,6 +21,7 @@ import DbUtils
 import LoggingUtils
 import PendingActionsTracker
 import Rebalancer
+import WebsocketPrototype
 
 import qualified PendingActionsTracker as PAT
 
@@ -47,8 +48,11 @@ initBridgewalkerHandles connectInfo = do
     dbConn <- connectPostgreSQL connectInfo
     fetState <- readBitcoindStateFromDB dbConn >>= \s
                     -> return $ updateMarkerAddresses s maConfig
+    let streamSettings = MtGoxStreamSettings
+                            DisableWalletNotifications SkipFullDepth
     mtgoxHandles <- initMtGoxAPI Nothing(bcMtGoxCredentials bwConfig)
-                                    SkipFullDepth
+                                    streamSettings
+    fetStateCopy <- newMVar fetState
     fbetHandle <- initFilteredBitcoinEventTask Nothing (bcRPCAuth bwConfig)
                     (bcNotifyFile bwConfig) acceptAfterThreeConfs fetState
     rbHandle <- initRebalancer appLogger Nothing (bcRPCAuth bwConfig)
@@ -60,6 +64,7 @@ initBridgewalkerHandles connectInfo = do
                                 , bhDBConn = dbConn
                                 , bhMtGoxHandles = mtgoxHandles
                                 , bhFilteredBitcoinEventTaskHandle = fbetHandle
+                                , bhFilteredEventStateCopy = fetStateCopy
                                 , bhRebalancerHandle = rbHandle
                                 , bhPendingActionsTrackerHandle =
                                     error "PendingActionsTracker was accessed,\
@@ -94,30 +99,10 @@ displayStats stats =
     let usd = fromIntegral (usdEarned stats) / (10 ^ (5 :: Integer))
     in putStrLn $ "Account activity: + $" ++ show usd
 
---actOnDeposits :: BridgewalkerHandles -> IO ()
---actOnDeposits bwHandles =
---    let fbetHandle = bhFilteredBitcoinEventTaskHandle bwHandles
---        dbConn = bhDBConn bwHandles
---        mtgoxHandles = bhMtGoxHandles bwHandles
---        safetyMargin = bcSafetyMargin . bhConfig $ bwHandles
---    in forever $ do
---        (fetState, fEvents) <- waitForFilteredBitcoinEvents fbetHandle
---        writeBitcoindStateToDB dbConn fetState
---        mapM_ (act mtgoxHandles safetyMargin) fEvents
---  where
---    act mtgoxHandles safetyMargin fEvent =
---            case fEvent of
---                fTx@FilteredNewTransaction{} -> do
---                    let amount = tAmount . fntTx $ fTx
---                    sell <- tryToSellBtc mtgoxHandles safetyMargin amount
---                    case sell of
---                        Left msg -> putStrLn msg
---                        Right stats -> displayStats stats
---                _ -> return ()
-
 actOnDeposits :: BridgewalkerHandles -> IO ()
 actOnDeposits bwHandles =
     let fbetHandle = bhFilteredBitcoinEventTaskHandle bwHandles
+        fetStateCopy = bhFilteredEventStateCopy bwHandles
         dbConn = bhDBConn bwHandles
         patHandle = bhPendingActionsTrackerHandle bwHandles
     in forever $ do
@@ -130,6 +115,8 @@ actOnDeposits bwHandles =
             let paState' = addPendingActions paState actions
             writeBitcoindStateToDB dbConn fetState
             writePendingActionsStateToDB dbConn paState'
+            _ <- swapMVar fetStateCopy fetState
+            return ()
         nudgePendingActionsTracker patHandle
   where
     convertToActions fTx@FilteredNewTransaction{} =
@@ -141,6 +128,7 @@ actOnDeposits bwHandles =
 main :: IO ()
 main = do
     bwHandles <- initBridgewalkerHandles myConnectInfo
+    _ <- forkIO $ runWebsocketServer bwHandles
     --justCatchUp bwHandles
     actOnDeposits bwHandles
 
