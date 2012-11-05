@@ -46,8 +46,10 @@ initBridgewalkerHandles connectInfo = do
     let watchdogLogger = adapt appLogger
     bwConfig <- readConfig
     let maConfig = bcMarkerAddresses bwConfig
-    dbConn <- connectPostgreSQL connectInfo
-    fetState <- readBitcoindStateFromDB dbConn >>= \s
+    dbConn1 <- connectPostgreSQL connectInfo
+    dbConn2 <- connectPostgreSQL connectInfo
+    dbConn3 <- connectPostgreSQL connectInfo
+    fetState <- readBitcoindStateFromDB dbConn1 >>= \s
                     -> return $ updateMarkerAddresses s maConfig
     let streamSettings = MtGoxStreamSettings
                             DisableWalletNotifications SkipFullDepth
@@ -66,7 +68,9 @@ initBridgewalkerHandles connectInfo = do
             BridgewalkerHandles { bhAppLogger = appLogger
                                 , bhWatchdogLogger = watchdogLogger
                                 , bhConfig = bwConfig
-                                , bhDBConn = dbConn
+                                , bhDBConnPAT = dbConn1
+                                , bhDBConnCH = dbConn2
+                                , bhDBConnFBET = dbConn3
                                 , bhMtGoxHandles = mtgoxHandles
                                 , bhFilteredBitcoinEventTaskHandle = fbetHandle
                                 , bhFilteredEventStateCopy = fetStateCopy
@@ -89,7 +93,7 @@ initBridgewalkerHandles connectInfo = do
 justCatchUp :: BridgewalkerHandles -> IO ()
 justCatchUp bwHandles =
     let fbetHandle = bhFilteredBitcoinEventTaskHandle bwHandles
-        dbConn = bhDBConn bwHandles
+        dbConn = bhDBConnFBET bwHandles
     in forever $ do
         (fetState, _) <- waitForFilteredBitcoinEvents fbetHandle
         writeBitcoindStateToDB dbConn fetState
@@ -114,7 +118,7 @@ actOnDeposits :: BridgewalkerHandles -> IO ()
 actOnDeposits bwHandles =
     let fbetHandle = bhFilteredBitcoinEventTaskHandle bwHandles
         fetStateCopy = bhFilteredEventStateCopy bwHandles
-        dbConn = bhDBConn bwHandles
+        dbConn = bhDBConnFBET bwHandles
         patHandle = bhPendingActionsTrackerHandle bwHandles
     in forever $ do
         (fetState, fEvents) <- waitForFilteredBitcoinEvents fbetHandle

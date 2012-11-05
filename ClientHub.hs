@@ -67,7 +67,7 @@ magicAddress = RPC.BitcoinAddress "17cWnmBb4b8EMrHhSiasMXsbsc1ru7iTGj"
 
 compileClientStatus :: BridgewalkerHandles -> BridgewalkerAccount -> IO ClientStatus
 compileClientStatus bwHandles bwAccount = do
-    let dbConn = bhDBConn bwHandles
+    let dbConn = bhDBConnCH bwHandles
         fetStateCopy = bhFilteredEventStateCopy bwHandles
         account = bAccount bwAccount
     (btcIn, usdBalance) <- getClientDBStatus dbConn account

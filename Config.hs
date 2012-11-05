@@ -39,7 +39,9 @@ data BridgewalkerHandles = BridgewalkerHandles
                             { bhAppLogger :: Logger
                             , bhWatchdogLogger :: WatchdogLogger
                             , bhConfig :: BridgewalkerConfig
-                            , bhDBConn :: Connection
+                            , bhDBConnPAT :: Connection
+                            , bhDBConnCH :: Connection
+                            , bhDBConnFBET :: Connection
                             , bhMtGoxHandles :: MtGoxAPIHandles
                             , bhFilteredBitcoinEventTaskHandle
                                 :: FilteredBitcoinEventTaskHandle

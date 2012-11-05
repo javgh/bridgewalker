@@ -68,7 +68,7 @@ nudgePendingActionsTracker (PendingActionsTrackerHandle chan) =
 
 trackerLoop :: (Connection -> IO (PendingActionsState)) -> (Connection -> PendingActionsState -> IO ()) -> BridgewalkerHandles -> Chan () -> IO ()
 trackerLoop readState writeState bwHandles chan =
-    let dbConn = bhDBConn bwHandles
+    let dbConn = bhDBConnPAT bwHandles
     in forever $ do
         _ <- readChan chan
         withTransaction dbConn $ do
@@ -126,7 +126,7 @@ checkPause expiration = do
 
 processDeposit :: BridgewalkerHandles-> Integer -> RPC.BitcoinAddress -> IO PendingActionsStateModification
 processDeposit bwHandles amount address =
-    let dbConn = bhDBConn bwHandles
+    let dbConn = bhDBConnPAT bwHandles
         logger = bhAppLogger bwHandles
         minimalOrderBTC = bcMtGoxMinimalOrderBTC . bhConfig $ bwHandles
         magicAddress = RPC.BitcoinAddress "17cWnmBb4b8EMrHhSiasMXsbsc1ru7iTGj"
@@ -166,7 +166,7 @@ sellBTC bwHandles amount bwAccount = do
     let mtgoxHandles = bhMtGoxHandles bwHandles
         safetyMarginBTC = bcSafetyMarginBTC . bhConfig $ bwHandles
         logger = bhAppLogger bwHandles
-        dbConn = bhDBConn bwHandles
+        dbConn = bhDBConnPAT bwHandles
         account = bAccount $ bwAccount
     sell <- tryToExecuteSellOrder mtgoxHandles safetyMarginBTC amount
     case sell of
@@ -212,7 +212,7 @@ buyBTC bwHandles amount address bwAccount = do
         depthStoreHandle = mtgoxDepthStoreHandle mtgoxHandles
         safetyMarginUSD = bcSafetyMarginUSD . bhConfig $ bwHandles
         logger = bhAppLogger bwHandles
-        dbConn = bhDBConn bwHandles
+        dbConn = bhDBConnPAT bwHandles
         account = bAccount $ bwAccount
     -- TODO: check for minimal BTC amount
     usdAmountM <- simulateBTCBuy depthStoreHandle amount

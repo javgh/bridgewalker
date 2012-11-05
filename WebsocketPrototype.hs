@@ -104,7 +104,7 @@ webSocketApp bwHandles rq = do
     forever $ processMessages bwHandles
 
 processMessages bwHandles = do
-    let dbConn = bhDBConn bwHandles
+    let dbConn = bhDBConnCH bwHandles
         patHandle = bhPendingActionsTrackerHandle bwHandles
     msg <- WS.receiveData
     let cmd = parseWSCommand msg :: Either String WebsocketCommand
