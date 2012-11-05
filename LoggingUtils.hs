@@ -47,6 +47,7 @@ data LogContent = RebalancerFailure { lcInfo :: String }
                                , lcAmount :: Integer
                                , lcInfo :: String
                                }
+                | WatchdogError { lcInfo :: String }
                 | LogMisc { lcInfo :: String }
                 deriving (Generic, Show)
 

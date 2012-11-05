@@ -285,9 +285,9 @@ sendBTC bwHandles amount address bwAccount = do
     let rpcAuth = bcRPCAuth . bhConfig $ bwHandles
         safetyMarginBTC = bcSafetyMarginBTC . bhConfig $ bwHandles
         logger = bhAppLogger bwHandles
+        watchdogLogger = bhWatchdogLogger bwHandles
         account = bAccount $ bwAccount
-        mLogger = Nothing   -- TODO: find better solution for watchdog logger
-    btcSystemBalance <- RPC.getBalanceR mLogger rpcAuth
+    btcSystemBalance <- RPC.getBalanceR (Just watchdogLogger) rpcAuth
                                             confsNeededForSending True
     if (amount + safetyMarginBTC <= adjustAmount btcSystemBalance)
         then do

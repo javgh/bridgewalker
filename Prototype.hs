@@ -43,6 +43,7 @@ periodicNudging patHandle = forever $ do
 initBridgewalkerHandles :: B.ByteString -> IO BridgewalkerHandles
 initBridgewalkerHandles connectInfo = do
     appLogger <- initLogger
+    let watchdogLogger = adapt appLogger
     bwConfig <- readConfig
     let maConfig = bcMarkerAddresses bwConfig
     dbConn <- connectPostgreSQL connectInfo
@@ -50,16 +51,20 @@ initBridgewalkerHandles connectInfo = do
                     -> return $ updateMarkerAddresses s maConfig
     let streamSettings = MtGoxStreamSettings
                             DisableWalletNotifications SkipFullDepth
-    mtgoxHandles <- initMtGoxAPI Nothing(bcMtGoxCredentials bwConfig)
+    mtgoxHandles <- initMtGoxAPI (Just watchdogLogger)
+                                    (bcMtGoxCredentials bwConfig)
                                     streamSettings
     fetStateCopy <- newMVar fetState
-    fbetHandle <- initFilteredBitcoinEventTask Nothing (bcRPCAuth bwConfig)
-                    (bcNotifyFile bwConfig) acceptAfterThreeConfs fetState
-    rbHandle <- initRebalancer appLogger Nothing (bcRPCAuth bwConfig)
-                                    mtgoxHandles (bcSafetyMarginBTC bwConfig)
+    fbetHandle <- initFilteredBitcoinEventTask (Just watchdogLogger)
+                    (bcRPCAuth bwConfig) (bcNotifyFile bwConfig)
+                    acceptAfterThreeConfs fetState
+    rbHandle <- initRebalancer appLogger (Just watchdogLogger)
+                                    (bcRPCAuth bwConfig) mtgoxHandles
+                                    (bcSafetyMarginBTC bwConfig)
     _ <- forkIO $ periodicRebalancing rbHandle
     let tempBWHandles =
             BridgewalkerHandles { bhAppLogger = appLogger
+                                , bhWatchdogLogger = watchdogLogger
                                 , bhConfig = bwConfig
                                 , bhDBConn = dbConn
                                 , bhMtGoxHandles = mtgoxHandles
@@ -74,6 +79,12 @@ initBridgewalkerHandles connectInfo = do
                     writePendingActionsStateToDB tempBWHandles
     _ <- forkIO $ periodicNudging patHandle
     return $ tempBWHandles { bhPendingActionsTrackerHandle = patHandle }
+  where
+    adapt :: Logger -> WatchdogLogger
+    adapt logger taskErr delay =
+        let logMsg = WatchdogError
+                        { lcInfo = formatWatchdogError taskErr delay }
+        in logger logMsg
 
 justCatchUp :: BridgewalkerHandles -> IO ()
 justCatchUp bwHandles =

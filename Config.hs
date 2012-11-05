@@ -7,6 +7,7 @@ module Config
 import Control.Applicative
 import Control.Concurrent
 import Control.Monad.Error
+import Control.Watchdog
 import Database.PostgreSQL.Simple
 import Data.ConfigFile
 import Network.BitcoinRPC
@@ -36,6 +37,7 @@ data BridgewalkerConfig = BridgewalkerConfig
 
 data BridgewalkerHandles = BridgewalkerHandles
                             { bhAppLogger :: Logger
+                            , bhWatchdogLogger :: WatchdogLogger
                             , bhConfig :: BridgewalkerConfig
                             , bhDBConn :: Connection
                             , bhMtGoxHandles :: MtGoxAPIHandles
