@@ -32,6 +32,9 @@ import PendingActionsTracker
 
 magicAccount = BridgewalkerAccount 1
 
+bridgewalkerServerVersion :: T.Text
+bridgewalkerServerVersion = "0.1"
+
 data WebsocketCommand = WSRequestStatus { wcSessionID :: T.Text
                                         , wcStatusHash :: Maybe T.Text
                                         }
@@ -39,6 +42,7 @@ data WebsocketCommand = WSRequestStatus { wcSessionID :: T.Text
                                   , wcBitcoinAddress :: T.Text
                                   , wcAmount :: Integer
                                   }
+                      | WSRequestVersion { wcClientVersion :: T.Text }
                       deriving (Show)
 
 data WebsocketReply = WSStatusReply { wrStatus :: ClientStatus
@@ -46,6 +50,7 @@ data WebsocketReply = WSStatusReply { wrStatus :: ClientStatus
                                     }
                     | WSStatusUnchangedReply
                     | WSCommandNotUnderstood { wrInfo :: T.Text }
+                    | WSServerVersion { wrServerVersion :: T.Text }
                     deriving (Show)
 
 instance FromJSON WebsocketCommand
@@ -56,6 +61,7 @@ instance FromJSON WebsocketCommand
         Just "send_btc" -> WSSendBTC <$> o .: "session_id"
                                      <*> o .: "bitcoin_address"
                                      <*> o .: "amount"
+        Just "version" -> WSRequestVersion <$> o .: "client_version"
         Just _ -> mzero
         Nothing -> mzero
     parseJSON _ = mzero
@@ -72,6 +78,10 @@ instance ToJSON WebsocketReply
     toJSON (WSCommandNotUnderstood info) =
         object [ "reply" .= ("not_understood" :: T.Text)
                , "info" .= info
+               ]
+    toJSON (WSServerVersion serverVersion) =
+        object [ "reply" .= ("server_version" :: T.Text)
+               , "server_version" .= serverVersion
                ]
 
 --broadcast :: Text -> ServerState -> IO ()
@@ -113,6 +123,10 @@ processMessages bwHandles = do
             WS.sendTextData . prepareWSReply $
                                     WSCommandNotUnderstood (T.pack errMsg)
         Right cmd -> case cmd of
+            WSRequestVersion _ -> do    -- ignore client version for now,
+                                        -- but might be needed in the future
+                let reply = WSServerVersion bridgewalkerServerVersion
+                WS.sendTextData . prepareWSReply $ reply
             WSRequestStatus _ _ -> do   -- TODO: check hash
                 status <- liftIO $ compileClientStatus bwHandles magicAccount
                 let reply = WSStatusReply { wrStatus = status
