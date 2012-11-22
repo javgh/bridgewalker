@@ -10,9 +10,10 @@ import Control.Monad
 import Control.Monad.IO.Class (liftIO)
 import Data.Aeson
 import Data.Aeson.Types
+import Database.PostgreSQL.Simple
 import Data.Char (isPunctuation, isSpace)
 import Data.Monoid (mappend)
-import Database.PostgreSQL.Simple
+import System.Random
 
 import qualified Data.Attoparsec as AP
 import qualified Data.ByteString as B
@@ -35,6 +36,15 @@ magicAccount = BridgewalkerAccount 1
 bridgewalkerServerVersion :: T.Text
 bridgewalkerServerVersion = "0.1"
 
+base58 :: String
+base58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+
+guestNameLength :: Int
+guestNameLength = 8
+
+guestPwLength :: Int
+guestPwLength = 25
+
 data WebsocketCommand = WSRequestStatus { wcSessionID :: T.Text
                                         , wcStatusHash :: Maybe T.Text
                                         }
@@ -43,6 +53,7 @@ data WebsocketCommand = WSRequestStatus { wcSessionID :: T.Text
                                   , wcAmount :: Integer
                                   }
                       | WSRequestVersion { wcClientVersion :: T.Text }
+                      | WSRegisterGuestAccount
                       deriving (Show)
 
 data WebsocketReply = WSStatusReply { wrStatus :: ClientStatus
@@ -62,6 +73,7 @@ instance FromJSON WebsocketCommand
                                      <*> o .: "bitcoin_address"
                                      <*> o .: "amount"
         Just "version" -> WSRequestVersion <$> o .: "client_version"
+        Just "register_guest_account" -> return WSRegisterGuestAccount
         Just _ -> mzero
         Nothing -> mzero
     parseJSON _ = mzero
@@ -127,6 +139,8 @@ processMessages bwHandles = do
                                         -- but might be needed in the future
                 let reply = WSServerVersion bridgewalkerServerVersion
                 WS.sendTextData . prepareWSReply $ reply
+            WSRegisterGuestAccount -> do
+                undefined
             WSRequestStatus _ _ -> do   -- TODO: check hash
                 status <- liftIO $ compileClientStatus bwHandles magicAccount
                 let reply = WSStatusReply { wrStatus = status
@@ -147,6 +161,33 @@ processMessages bwHandles = do
                                 }
                 liftIO $ addBuyAction dbConn action
                 liftIO $ nudgePendingActionsTracker patHandle
+
+createGuestAccount :: Connection -> IO (T.Text, T.Text)
+createGuestAccount dbConn = do
+    guestName <- createUniqueGuestName dbConn
+    guestPw <- randomText guestPwLength
+    -- TODO: scramble password - use pwstore-fast
+    execute dbConn
+        "insert into accounts (btc_in, usd_balance, account_name, account_pw\
+            \, is_full_account, primary_btc_address)\
+            \ values (0, 0, ?, ?, false, null)" (guestName, guestPw)
+    return (guestName, guestPw)
+
+createUniqueGuestName :: Connection -> IO T.Text
+createUniqueGuestName dbConn = do
+    guestName <- ("guest_" `T.append`) <$> randomText guestNameLength
+    exists <- checkGuestNameExists dbConn guestName
+    if exists
+        then createUniqueGuestName dbConn
+        else return guestName
+
+randomText :: Int -> IO T.Text
+randomText len = do
+    let size = length base58
+    g <- newStdGen
+    let ints = take len $ randomRs (0, size - 1) g
+        chars = map (\pos -> base58 !! pos) ints
+    return $ T.pack chars
 
 addBuyAction dbConn action = withTransaction dbConn $ do
     paState <- readPendingActionsStateFromDB dbConn

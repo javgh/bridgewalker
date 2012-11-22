@@ -7,6 +7,8 @@ module DbUtils
     , getBTCInBalance
     , getUSDBalance
     , getClientDBStatus
+    , checkGuestNameExists
+    , debugConnection
     ) where
 
 import Control.Applicative
@@ -16,8 +18,12 @@ import Network.BitcoinRPC.Events.MarkerAddresses
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Base64 as B64
+import qualified Data.Text as T
 
 import CommonTypes
+
+debugConnection :: IO Connection
+debugConnection = connectPostgreSQL "dbname=bridgewalker"
 
 readStateFromDB :: Connection -> B.ByteString -> IO B.ByteString
 readStateFromDB conn key = do
@@ -87,6 +93,12 @@ getClientDBStatus dbConn account = do
         query dbConn "select btc_in, usd_balance from accounts\
                         \ where account_nr=?" (Only account)
     return (btcIn, usdBalance)
+
+checkGuestNameExists :: Connection -> T.Text -> IO Bool
+checkGuestNameExists dbConn guestName = do
+    result <- query dbConn "select 1 from accounts where account_name=?"
+                                (Only guestName) :: IO [Only Integer]
+    return $ length result > 0
 
 expectOneRow :: String -> [a] -> a
 expectOneRow errMsg [] = error errMsg
