@@ -35,7 +35,7 @@ createTableAccounts conn = do
                                \, account_name text\
                                \, account_pw text\
                                \, is_full_account boolean\
-                               \, primary_btc_address integer\
+                               \, primary_btc_address text\
                                \)"
     execute_ conn
         "create index accounts_account_name_index on accounts (account_name)"
@@ -44,7 +44,7 @@ createTableAccounts conn = do
 createTableAddresses :: Connection -> IO ()
 createTableAddresses conn = do
     execute_ conn
-        "create table addresses ( id integer primary key\
+        "create table addresses ( id serial primary key\
                                \, account integer\
                                \            references accounts(account_nr)\
                                \, btc_address text unique\

@@ -8,6 +8,7 @@ import Control.Concurrent
 import Control.Exception (fromException)
 import Control.Monad
 import Control.Monad.IO.Class (liftIO)
+import Crypto.PasswordStore
 import Data.Aeson
 import Data.Aeson.Types
 import Database.PostgreSQL.Simple
@@ -29,6 +30,7 @@ import qualified Network.WebSockets as WS
 import ClientHub
 import Config
 import DbUtils
+import LoggingUtils
 import PendingActionsTracker
 
 magicAccount = BridgewalkerAccount 1
@@ -45,6 +47,9 @@ guestNameLength = 8
 guestPwLength :: Int
 guestPwLength = 25
 
+passwordStoreStrength :: Int
+passwordStoreStrength = 15
+
 data WebsocketCommand = WSRequestStatus { wcSessionID :: T.Text
                                         , wcStatusHash :: Maybe T.Text
                                         }
@@ -53,7 +58,7 @@ data WebsocketCommand = WSRequestStatus { wcSessionID :: T.Text
                                   , wcAmount :: Integer
                                   }
                       | WSRequestVersion { wcClientVersion :: T.Text }
-                      | WSRegisterGuestAccount
+                      | WSCreateGuestAccount
                       deriving (Show)
 
 data WebsocketReply = WSStatusReply { wrStatus :: ClientStatus
@@ -62,6 +67,9 @@ data WebsocketReply = WSStatusReply { wrStatus :: ClientStatus
                     | WSStatusUnchangedReply
                     | WSCommandNotUnderstood { wrInfo :: T.Text }
                     | WSServerVersion { wrServerVersion :: T.Text }
+                    | WSGuestAccountCreated { wrAccountName :: T.Text
+                                            , wrAccountPassword :: T.Text
+                                            }
                     deriving (Show)
 
 instance FromJSON WebsocketCommand
@@ -73,7 +81,7 @@ instance FromJSON WebsocketCommand
                                      <*> o .: "bitcoin_address"
                                      <*> o .: "amount"
         Just "version" -> WSRequestVersion <$> o .: "client_version"
-        Just "register_guest_account" -> return WSRegisterGuestAccount
+        Just "create_guest_account" -> return WSCreateGuestAccount
         Just _ -> mzero
         Nothing -> mzero
     parseJSON _ = mzero
@@ -94,6 +102,11 @@ instance ToJSON WebsocketReply
     toJSON (WSServerVersion serverVersion) =
         object [ "reply" .= ("server_version" :: T.Text)
                , "server_version" .= serverVersion
+               ]
+    toJSON (WSGuestAccountCreated accountName accountPw) =
+        object [ "reply" .= ("guest_account_created" :: T.Text)
+               , "account_name" .= accountName
+               , "account_password" .= accountPw
                ]
 
 --broadcast :: Text -> ServerState -> IO ()
@@ -139,8 +152,10 @@ processMessages bwHandles = do
                                         -- but might be needed in the future
                 let reply = WSServerVersion bridgewalkerServerVersion
                 WS.sendTextData . prepareWSReply $ reply
-            WSRegisterGuestAccount -> do
-                undefined
+            WSCreateGuestAccount -> do
+                (guestName, guestPw) <- liftIO $ createGuestAccount bwHandles
+                let reply = WSGuestAccountCreated guestName guestPw
+                WS.sendTextData . prepareWSReply $ reply
             WSRequestStatus _ _ -> do   -- TODO: check hash
                 status <- liftIO $ compileClientStatus bwHandles magicAccount
                 let reply = WSStatusReply { wrStatus = status
@@ -162,15 +177,29 @@ processMessages bwHandles = do
                 liftIO $ addBuyAction dbConn action
                 liftIO $ nudgePendingActionsTracker patHandle
 
-createGuestAccount :: Connection -> IO (T.Text, T.Text)
-createGuestAccount dbConn = do
+--createGuestAccount :: Connection -> IO (T.Text, T.Text)
+--createGuestAccount dbConn = do
+
+createGuestAccount bwHandles = do
+    let dbConn = bhDBConnCH bwHandles
+        watchdogLogger = bhWatchdogLogger bwHandles
+        rpcAuth = bcRPCAuth . bhConfig $ bwHandles
+        logger = bhAppLogger bwHandles
     guestName <- createUniqueGuestName dbConn
     guestPw <- randomText guestPwLength
-    -- TODO: scramble password - use pwstore-fast
+    pwHash <- makePassword (T.encodeUtf8 guestPw) passwordStoreStrength
+    btcAddress <- RPC.getNewAddressR (Just watchdogLogger) rpcAuth
     execute dbConn
         "insert into accounts (btc_in, usd_balance, account_name, account_pw\
             \, is_full_account, primary_btc_address)\
-            \ values (0, 0, ?, ?, false, null)" (guestName, guestPw)
+            \ values (0, 0, ?, ?, false, ?)"
+            (guestName, pwHash, RPC.btcAddress btcAddress)
+    account <- getAccountNumber dbConn guestName
+    execute dbConn
+        "insert into addresses (account, btc_address) values (?, ?)"
+            (account, RPC.btcAddress btcAddress)
+    let logMsg = GuestAccountCreated (T.unpack guestName)
+    logger logMsg
     return (guestName, guestPw)
 
 createUniqueGuestName :: Connection -> IO T.Text

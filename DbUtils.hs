@@ -8,6 +8,7 @@ module DbUtils
     , getUSDBalance
     , getClientDBStatus
     , checkGuestNameExists
+    , getAccountNumber
     , debugConnection
     ) where
 
@@ -99,6 +100,15 @@ checkGuestNameExists dbConn guestName = do
     result <- query dbConn "select 1 from accounts where account_name=?"
                                 (Only guestName) :: IO [Only Integer]
     return $ length result > 0
+
+getAccountNumber :: Connection -> T.Text -> IO Integer
+getAccountNumber dbConn accountName = do
+    let errMsg = "Expected to find account " ++ T.unpack accountName
+                    ++ " while doing getAccountNumber, but failed."
+    (Only account) <- expectOneRow errMsg <$>
+        query dbConn "select account_nr from accounts\
+                        \ where account_name=?" (Only accountName)
+    return account
 
 expectOneRow :: String -> [a] -> a
 expectOneRow errMsg [] = error errMsg
