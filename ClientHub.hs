@@ -1,10 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 module ClientHub
-    ( ClientStatus
-    , compileClientStatus
+    ( compileClientStatus
+    , initClientHub
+    , ClientHubHandle
     ) where
 
+import Control.Applicative
 import Control.Concurrent
+import Control.Monad
 import Data.Aeson
 
 import qualified Data.Text as T
@@ -15,55 +18,38 @@ import CommonTypes
 import Config
 import DbUtils
 
-data ClientStatus = ClientStatus { csUSDBalance :: Integer
-                                 , csBTCIn :: Integer
-                                 , csPendingTxs :: [ClientPendingTransaction]
-                                 }
-                    deriving (Show)
-
-data ClientPendingTransaction = ClientPendingTransaction
-                                    { cptAmount :: Integer
-                                    , cptReason :: ClientPendingReason
-                                    }
-                                deriving (Show)
-
-data ClientPendingReason = TooFewConfirmations { cprConfs :: Integer }
-                         | MarkerAddressLimitReached
-                                { cprMarkerAddress :: T.Text }
-                         deriving (Show)
-
-instance ToJSON ClientPendingReason
-  where
-    toJSON (TooFewConfirmations confs) =
-        object [ "type" .= ("too_few_confirmations" :: T.Text)
-               , "confirmations" .= confs
-               ]
-    toJSON (MarkerAddressLimitReached markerAddress) =
-        object [ "type" .= ("marker_address_limit_reached" :: T.Text)
-               , "marker_address" .= markerAddress
-               ]
-
-instance ToJSON ClientPendingTransaction
-  where
-    toJSON cpt@ClientPendingTransaction{} =
-        let amount = cptAmount cpt
-            reason = cptReason cpt
-        in object [ "amount" .= amount
-                  , "reason" .= reason
-                  ]
-
-instance ToJSON ClientStatus
-  where
-    toJSON cs@ClientStatus{} =
-        let usdBalance = csUSDBalance cs
-            btcIn = csBTCIn cs
-            pendingTxs = csPendingTxs cs
-        in object [ "usd_balance" .= usdBalance
-                  , "btc_in" .= btcIn
-                  , "pending_txs" .= pendingTxs
-                  ]
-
 magicAddress = RPC.BitcoinAddress "17cWnmBb4b8EMrHhSiasMXsbsc1ru7iTGj"
+
+-- TODO: switch from accountName to accountNumber (BridgewalkerAccount)
+
+--initClientHub :: IO ClientHubHandle
+initClientHub bwHandles = do
+    handle <- ClientHubHandle <$> newChan
+    _ <- forkIO $ clientHubLoop handle bwHandles
+    return handle
+
+--clientHubLoop :: ClientHubHandle -> IO ()
+clientHubLoop (ClientHubHandle chChan) bwHandles = go []
+  where
+    go clientList = do
+        msg <- readChan chChan
+        case msg of
+            RegisterClient accountName answerChan ->
+                let clientList' = (accountName, answerChan) : clientList
+                in go clientList'
+
+registerClientWithHub :: ClientHubHandle -> T.Text -> IO (Chan ClientHubAnswer)
+registerClientWithHub (ClientHubHandle chChan) accountName = do
+    answerChan <- newChan
+    writeChan chChan $ RegisterClient { chcAccountName = accountName
+                                      , chcAnswerChan = answerChan
+                                      }
+    return answerChan
+
+requestClientStatus :: ClientHubHandle -> T.Text -> IO ()
+requestClientStatus (ClientHubHandle chChan) accountName = do
+    writeChan chChan $ RequestClientStatus accountName
+    return ()
 
 compileClientStatus :: BridgewalkerHandles -> BridgewalkerAccount -> IO ClientStatus
 compileClientStatus bwHandles bwAccount = do

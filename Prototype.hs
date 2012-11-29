@@ -15,6 +15,7 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Base64 as B64
 
 import AddressUtils
+import ClientHub
 import CommonTypes
 import Config
 import DbUtils
@@ -64,7 +65,7 @@ initBridgewalkerHandles connectInfo = do
                                     (bcRPCAuth bwConfig) mtgoxHandles
                                     (bcSafetyMarginBTC bwConfig)
     _ <- forkIO $ periodicRebalancing rbHandle
-    let tempBWHandles =
+    let preliminaryBWHandles =
             BridgewalkerHandles { bhAppLogger = appLogger
                                 , bhWatchdogLogger = watchdogLogger
                                 , bhConfig = bwConfig
@@ -75,14 +76,22 @@ initBridgewalkerHandles connectInfo = do
                                 , bhFilteredBitcoinEventTaskHandle = fbetHandle
                                 , bhFilteredEventStateCopy = fetStateCopy
                                 , bhRebalancerHandle = rbHandle
+                                , bhClientHubHandle =
+                                    error "ClientHub was accessed,\
+                                          \ but not initialized yet."
                                 , bhPendingActionsTrackerHandle =
                                     error "PendingActionsTracker was accessed,\
                                           \ but not initialized yet."
                                 }
+    chHandle <- initClientHub preliminaryBWHandles
+    let preliminaryBWHandles' =
+            preliminaryBWHandles { bhClientHubHandle = chHandle }
     patHandle <- initPendingActionsTracker readPendingActionsStateFromDB
-                    writePendingActionsStateToDB tempBWHandles
+                    writePendingActionsStateToDB preliminaryBWHandles'
     _ <- forkIO $ periodicNudging patHandle
-    return $ tempBWHandles { bhPendingActionsTrackerHandle = patHandle }
+    let bwHandles =
+            preliminaryBWHandles' { bhPendingActionsTrackerHandle = patHandle }
+    return bwHandles
   where
     adapt :: Logger -> WatchdogLogger
     adapt logger taskErr delay =

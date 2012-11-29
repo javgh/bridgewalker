@@ -48,6 +48,7 @@ data BridgewalkerHandles = BridgewalkerHandles
                             , bhFilteredEventStateCopy
                                 :: MVar FilteredEventTaskState
                             , bhRebalancerHandle :: RebalancerHandle
+                            , bhClientHubHandle :: ClientHubHandle
                             , bhPendingActionsTrackerHandle
                                 :: PendingActionsTrackerHandle
                             }
