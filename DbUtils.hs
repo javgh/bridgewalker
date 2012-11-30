@@ -8,11 +8,13 @@ module DbUtils
     , getUSDBalance
     , getClientDBStatus
     , checkGuestNameExists
+    , checkLogin
     , getAccountNumber
     , debugConnection
     ) where
 
 import Control.Applicative
+import Crypto.PasswordStore
 import Database.PostgreSQL.Simple
 import Data.Serialize
 import Network.BitcoinRPC.Events.MarkerAddresses
@@ -20,6 +22,7 @@ import Network.BitcoinRPC.Events.MarkerAddresses
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Base64 as B64
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 
 import CommonTypes
 
@@ -100,6 +103,15 @@ checkGuestNameExists dbConn guestName = do
     result <- query dbConn "select 1 from accounts where account_name=?"
                                 (Only guestName) :: IO [Only Integer]
     return $ length result > 0
+
+checkLogin :: Connection -> T.Text -> T.Text -> IO Bool
+checkLogin dbConn accountName accountPassword = do
+    result <- query dbConn "select account_pw from accounts\
+                                \ where account_name=?" (Only accountName)
+    case result of
+        [] -> return False
+        (Only pwHash:_) ->
+            return $ verifyPassword (T.encodeUtf8 accountPassword) pwHash
 
 getAccountNumber :: Connection -> T.Text -> IO Integer
 getAccountNumber dbConn accountName = do

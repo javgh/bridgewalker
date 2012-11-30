@@ -28,6 +28,7 @@ import qualified Network.BitcoinRPC as RPC
 import qualified Network.WebSockets as WS
 
 import ClientHub
+import CommonTypes
 import Config
 import DbUtils
 import LoggingUtils
@@ -59,6 +60,9 @@ data WebsocketCommand = WSRequestStatus { wcSessionID :: T.Text
                                   }
                       | WSRequestVersion { wcClientVersion :: T.Text }
                       | WSCreateGuestAccount
+                      | WSLogin { wcAccountName :: T.Text
+                                , wcAccountPassword :: T.Text
+                                }
                       deriving (Show)
 
 data WebsocketReply = WSStatusReply { wrStatus :: ClientStatus
@@ -66,10 +70,13 @@ data WebsocketReply = WSStatusReply { wrStatus :: ClientStatus
                                     }
                     | WSStatusUnchangedReply
                     | WSCommandNotUnderstood { wrInfo :: T.Text }
+                    | WSNeedToBeAuthenticated
                     | WSServerVersion { wrServerVersion :: T.Text }
                     | WSGuestAccountCreated { wrAccountName :: T.Text
                                             , wrAccountPassword :: T.Text
                                             }
+                    | WSLoginSuccessful
+                    | WSLoginFailed { wrReason :: T.Text }
                     deriving (Show)
 
 instance FromJSON WebsocketCommand
@@ -82,6 +89,8 @@ instance FromJSON WebsocketCommand
                                      <*> o .: "amount"
         Just "version" -> WSRequestVersion <$> o .: "client_version"
         Just "create_guest_account" -> return WSCreateGuestAccount
+        Just "login" -> WSLogin <$> o .: "account_name"
+                                <*> o .: "account_password"
         Just _ -> mzero
         Nothing -> mzero
     parseJSON _ = mzero
@@ -99,6 +108,8 @@ instance ToJSON WebsocketReply
         object [ "reply" .= ("not_understood" :: T.Text)
                , "info" .= info
                ]
+    toJSON WSNeedToBeAuthenticated =
+        object [ "reply" .= ("need_to_be_authenticated" :: T.Text) ]
     toJSON (WSServerVersion serverVersion) =
         object [ "reply" .= ("server_version" :: T.Text)
                , "server_version" .= serverVersion
@@ -107,6 +118,12 @@ instance ToJSON WebsocketReply
         object [ "reply" .= ("guest_account_created" :: T.Text)
                , "account_name" .= accountName
                , "account_password" .= accountPw
+               ]
+    toJSON WSLoginSuccessful =
+        object [ "reply" .= ("login_successful" :: T.Text) ]
+    toJSON (WSLoginFailed reason) =
+        object [ "reply" .= ("login_failed" :: T.Text)
+               , "reason" .= reason
                ]
 
 --broadcast :: Text -> ServerState -> IO ()
@@ -138,6 +155,7 @@ webSocketApp bwHandles rq = do
     WS.acceptRequest rq
     forever $ processMessages bwHandles
 
+processMessages :: WS.TextProtocol p => BridgewalkerHandles -> WS.WebSockets p ()
 processMessages bwHandles = do
     let dbConn = bhDBConnCH bwHandles
         patHandle = bhPendingActionsTrackerHandle bwHandles
@@ -156,26 +174,39 @@ processMessages bwHandles = do
                 (guestName, guestPw) <- liftIO $ createGuestAccount bwHandles
                 let reply = WSGuestAccountCreated guestName guestPw
                 WS.sendTextData . prepareWSReply $ reply
-            WSRequestStatus _ _ -> do   -- TODO: check hash
-                status <- liftIO $ compileClientStatus bwHandles magicAccount
-                let reply = WSStatusReply { wrStatus = status
-                                          , wrStatusHash = "TODO"
-                                          }
-                WS.sendTextData . prepareWSReply $ reply
-            WSSendBTC _ address amount -> do
-                -- TODO: move functionality into ClientHub module
-                -- TODO: check validity of Bitcoin address
-                -- TODO: protect against negative or too large amounts
-                --       (probably need to modify DepthStore to signal
-                --        when amount can not be fulfilled)
-                let action = BuyBTCAction
-                                { baAmount = amount
-                                , baAddress =
-                                    RPC.BitcoinAddress address
-                                , baAccount = magicAccount
-                                }
-                liftIO $ addBuyAction dbConn action
-                liftIO $ nudgePendingActionsTracker patHandle
+            WSLogin accountName accountPassword -> do
+                isSuccessful <- liftIO $
+                    checkLogin dbConn accountName accountPassword
+                WS.sendTextData . prepareWSReply $
+                    case isSuccessful of
+                        True -> WSLoginSuccessful
+                        False -> WSLoginFailed "Unkown account or wrong password"
+                -- TODO: hand over to ClientHub
+            _ -> do
+                WS.sendTextData . prepareWSReply $ WSNeedToBeAuthenticated
+
+
+
+--            WSRequestStatus _ _ -> do   -- TODO: check hash
+--                status <- liftIO $ compileClientStatus bwHandles magicAccount
+--                let reply = WSStatusReply { wrStatus = status
+--                                          , wrStatusHash = "TODO"
+--                                          }
+--                WS.sendTextData . prepareWSReply $ reply
+--            WSSendBTC _ address amount -> do
+--                -- TODO: move functionality into ClientHub module
+--                -- TODO: check validity of Bitcoin address
+--                -- TODO: protect against negative or too large amounts
+--                --       (probably need to modify DepthStore to signal
+--                --        when amount can not be fulfilled)
+--                let action = BuyBTCAction
+--                                { baAmount = amount
+--                                , baAddress =
+--                                    RPC.BitcoinAddress address
+--                                , baAccount = magicAccount
+--                                }
+--                liftIO $ addBuyAction dbConn action
+--                liftIO $ nudgePendingActionsTracker patHandle
 
 --createGuestAccount :: Connection -> IO (T.Text, T.Text)
 --createGuestAccount dbConn = do

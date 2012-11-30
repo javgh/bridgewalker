@@ -1,6 +1,6 @@
 -- This module is necessary to avoid cyclic imports in some cases.
 -- Unfortunately it leaks more than is necessary.
-{-# LANGUAGE DeriveGeneric, OverloadedStrings #-}
+{-# LANGUAGE DeriveGeneric, OverloadedStrings, DeriveDataTypeable #-}
 module CommonTypes
     ( PendingActionsTrackerHandle(..)
     , PendingActionsState(..)
@@ -22,6 +22,7 @@ import Data.Aeson
 import Data.Serialize
 import Data.Time
 import Data.Time.Clock
+import Data.Typeable
 import GHC.Generics
 
 import qualified Data.Sequence as S
@@ -38,7 +39,7 @@ data PendingActionsState = PendingActionsState
                            deriving (Show, Generic)
 
 data BridgewalkerAccount = BridgewalkerAccount { bAccount :: Integer }
-                           deriving (Generic, Show)
+                           deriving (Generic, Show, Eq, Ord, Typeable)
 
 data BridgewalkerAction = DepositAction { baAmount :: Integer
                                         , baAddress :: RPC.BitcoinAddress
@@ -60,10 +61,10 @@ data BridgewalkerAction = DepositAction { baAmount :: Integer
 
 data ClientHubAnswer = ForwardStatusToClient ClientStatus
 
-data ClientHubCommand = RegisterClient { chcAccountName :: T.Text
+data ClientHubCommand = RegisterClient { chcAccount :: BridgewalkerAccount
                                        , chcAnswerChan :: Chan ClientHubAnswer
                                        }
-                      | RequestClientStatus { chcAccountName :: T.Text }
+                      | RequestClientStatus { chcAccount :: BridgewalkerAccount }
 
 newtype ClientHubHandle = ClientHubHandle { unCHH :: Chan ClientHubCommand }
 
@@ -84,8 +85,7 @@ data ClientPendingReason = TooFewConfirmations { cprConfs :: Integer }
                                 { cprMarkerAddress :: T.Text }
                          deriving (Show)
 
-instance ToJSON ClientPendingReason
-  where
+instance ToJSON ClientPendingReason where
     toJSON (TooFewConfirmations confs) =
         object [ "type" .= ("too_few_confirmations" :: T.Text)
                , "confirmations" .= confs
@@ -95,8 +95,7 @@ instance ToJSON ClientPendingReason
                , "marker_address" .= markerAddress
                ]
 
-instance ToJSON ClientPendingTransaction
-  where
+instance ToJSON ClientPendingTransaction where
     toJSON cpt@ClientPendingTransaction{} =
         let amount = cptAmount cpt
             reason = cptReason cpt
@@ -104,8 +103,7 @@ instance ToJSON ClientPendingTransaction
                   , "reason" .= reason
                   ]
 
-instance ToJSON ClientStatus
-  where
+instance ToJSON ClientStatus where
     toJSON cs@ClientStatus{} =
         let usdBalance = csUSDBalance cs
             btcIn = csBTCIn cs

@@ -129,8 +129,8 @@ processDeposit bwHandles amount address =
     let dbConn = bhDBConnPAT bwHandles
         logger = bhAppLogger bwHandles
         minimalOrderBTC = bcMtGoxMinimalOrderBTC . bhConfig $ bwHandles
-        magicAddress = RPC.BitcoinAddress "17cWnmBb4b8EMrHhSiasMXsbsc1ru7iTGj"
-        magicAccount = 1 :: Integer
+        magicAddress = RPC.BitcoinAddress "1KmWJbRo4sjcQBFZN83KExVjBxTNxST6fL"
+        magicAccount = 28 :: Integer
     in if adjustAddr address == magicAddress
         then do
             btcBalance <- getBTCInBalance dbConn magicAccount
