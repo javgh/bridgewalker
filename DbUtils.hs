@@ -10,6 +10,7 @@ module DbUtils
     , checkGuestNameExists
     , checkLogin
     , getAccountNumber
+    , getAccountByAddress
     , debugConnection
     ) where
 
@@ -123,6 +124,14 @@ getAccountNumber dbConn accountName = do
         query dbConn "select account_nr from accounts\
                         \ where account_name=?" (Only accountName)
     return account
+
+getAccountByAddress :: Connection -> T.Text -> IO (Maybe BridgewalkerAccount)
+getAccountByAddress dbConn btcAddress = do
+    result <- query dbConn "select account from addresses\
+                                \ where btc_address=?" (Only btcAddress)
+    case result of
+        [] -> return Nothing
+        (Only accountNr:_) -> return $ Just (BridgewalkerAccount accountNr)
 
 expectOneRow :: String -> [a] -> a
 expectOneRow errMsg [] = error errMsg

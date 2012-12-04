@@ -29,7 +29,7 @@ import qualified PendingActionsTracker as PAT
 myConnectInfo :: B.ByteString
 myConnectInfo = "dbname=bridgewalker"
 
-acceptAfterThreeConfs txHeader = thConfirmations txHeader >= 3
+acceptAfterThreeConfs txHeader = thConfirmations txHeader >= 1  -- TODO: set back to 3
 
 periodicRebalancing :: RebalancerHandle -> IO ()
 periodicRebalancing rbHandle = forever $ do

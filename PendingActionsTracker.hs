@@ -125,24 +125,29 @@ checkPause expiration = do
                 else KeepAction
 
 processDeposit :: BridgewalkerHandles-> Integer -> RPC.BitcoinAddress -> IO PendingActionsStateModification
-processDeposit bwHandles amount address =
+processDeposit bwHandles amount address = do
     let dbConn = bhDBConnPAT bwHandles
         logger = bhAppLogger bwHandles
         minimalOrderBTC = bcMtGoxMinimalOrderBTC . bhConfig $ bwHandles
-        magicAddress = RPC.BitcoinAddress "1KmWJbRo4sjcQBFZN83KExVjBxTNxST6fL"
-        magicAccount = 28 :: Integer
-    in if adjustAddr address == magicAddress
-        then do
-            btcBalance <- getBTCInBalance dbConn magicAccount
+    accountM <- getAccountByAddress dbConn (adjustAddr address)
+    case accountM of
+        Nothing -> do
+            let logMsg = SystemDepositProcessed
+                            { lcInfo = "Deposit to system -\
+                                       \ no matching account found." }
+            logger logMsg
+            return RemoveAction
+        Just (BridgewalkerAccount account) -> do
+            btcBalance <- getBTCInBalance dbConn account
             let newBalance = btcBalance + amount
             execute dbConn
                         "update accounts set btc_in=? where account_nr=?"
-                        (newBalance, magicAccount)
+                        (newBalance, account)
             let logMsg = DepositProcessed
-                            { lcAccount = magicAccount
+                            { lcAccount = account
                             , lcInfo = show amount
                                         ++ " BTC deposited into account "
-                                        ++ show magicAccount
+                                        ++ show account
                                         ++ " - balance is now "
                                         ++ show newBalance ++ " BTC."
                             }
@@ -151,15 +156,10 @@ processDeposit bwHandles amount address =
                         then let action = SellBTCAction
                                             { baAmount = newBalance
                                             , baAccount =
-                                                BridgewalkerAccount magicAccount
+                                                BridgewalkerAccount account
                                             }
                              in ReplaceAction action
                         else RemoveAction
-        else do
-            let logMsg = LogMisc { lcInfo = "Ignoring deposit to\
-                                             \ non-magical address." }
-            logger logMsg
-            return RemoveAction
 
 sellBTC :: BridgewalkerHandles-> Integer-> BridgewalkerAccount-> IO PendingActionsStateModification
 sellBTC bwHandles amount bwAccount = do

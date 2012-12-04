@@ -27,6 +27,11 @@ instance IsBitcoinAddress MtGox.BitcoinDepositAddress
     addrToText = addrToText . MtGox.bdaAddr
     textToAddr = MtGox.BitcoinDepositAddress . textToAddr
 
+instance IsBitcoinAddress T.Text
+  where
+    addrToText = id
+    textToAddr = id
+
 class IsBitcoinAmount a where
     amountToInteger :: a -> Integer
     integerToAmount :: Integer -> a

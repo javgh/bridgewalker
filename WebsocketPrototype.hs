@@ -34,8 +34,6 @@ import DbUtils
 import LoggingUtils
 import PendingActionsTracker
 
-magicAccount = BridgewalkerAccount 1
-
 bridgewalkerServerVersion :: T.Text
 bridgewalkerServerVersion = "0.1"
 
