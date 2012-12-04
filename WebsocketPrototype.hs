@@ -51,10 +51,7 @@ guestPwLength = 25
 passwordStoreStrength :: Int
 passwordStoreStrength = 15
 
-data WebsocketCommand = WSRequestStatus { wcSessionID :: T.Text
-                                        , wcStatusHash :: Maybe T.Text
-                                        }
-                      | WSSendBTC { wcSessionID :: T.Text
+data WebsocketCommand = WSSendBTC { wcSessionID :: T.Text
                                   , wcBitcoinAddress :: T.Text
                                   , wcAmount :: Integer
                                   }
@@ -63,12 +60,10 @@ data WebsocketCommand = WSRequestStatus { wcSessionID :: T.Text
                       | WSLogin { wcAccountName :: T.Text
                                 , wcAccountPassword :: T.Text
                                 }
+                      | WSRequestStatus
                       deriving (Show)
 
-data WebsocketReply = WSStatusReply { wrStatus :: ClientStatus
-                                    , wrStatusHash :: T.Text
-                                    }
-                    | WSStatusUnchangedReply
+data WebsocketReply = WSStatus { wrStatus :: ClientStatus }
                     | WSCommandNotUnderstood { wrInfo :: T.Text }
                     | WSNeedToBeAuthenticated
                     | WSServerVersion { wrServerVersion :: T.Text }
@@ -79,15 +74,17 @@ data WebsocketReply = WSStatusReply { wrStatus :: ClientStatus
                     | WSLoginFailed { wrReason :: T.Text }
                     deriving (Show)
 
+data AuthenticatedEvent = MessageFromClient WebsocketCommand
+                        | MessageFromClientHub ClientHubAnswer
+
 instance FromJSON WebsocketCommand
   where
     parseJSON (Object o) = case H.lookup "op" o of
-        Just "status" -> WSRequestStatus <$> o .: "session_id"
-                                         <*> o .:? "status_hash"
+        Just "request_status" -> return WSRequestStatus
         Just "send_btc" -> WSSendBTC <$> o .: "session_id"
                                      <*> o .: "bitcoin_address"
                                      <*> o .: "amount"
-        Just "version" -> WSRequestVersion <$> o .: "client_version"
+        Just "request_version" -> WSRequestVersion <$> o .: "client_version"
         Just "create_guest_account" -> return WSCreateGuestAccount
         Just "login" -> WSLogin <$> o .: "account_name"
                                 <*> o .: "account_password"
@@ -97,13 +94,10 @@ instance FromJSON WebsocketCommand
 
 instance ToJSON WebsocketReply
   where
-    toJSON (WSStatusReply status statusHash) =
-        object [ "reply" .= ("status_reply" :: T.Text)
+    toJSON (WSStatus status) =
+        object [ "reply" .= ("status" :: T.Text)
                , "status" .= status
-               , "status_hash" .= statusHash
                ]
-    toJSON WSStatusUnchangedReply =
-        object [ "reply" .= ("status_unchanged_reply" :: T.Text) ]
     toJSON (WSCommandNotUnderstood info) =
         object [ "reply" .= ("not_understood" :: T.Text)
                , "info" .= info
@@ -159,6 +153,7 @@ processMessages :: WS.TextProtocol p => BridgewalkerHandles -> WS.WebSockets p (
 processMessages bwHandles = do
     let dbConn = bhDBConnCH bwHandles
         patHandle = bhPendingActionsTrackerHandle bwHandles
+        chHandle = bhClientHubHandle bwHandles
     msg <- WS.receiveData
     let cmd = parseWSCommand msg :: Either String WebsocketCommand
     case parseWSCommand msg of
@@ -175,16 +170,54 @@ processMessages bwHandles = do
                 let reply = WSGuestAccountCreated guestName guestPw
                 WS.sendTextData . prepareWSReply $ reply
             WSLogin accountName accountPassword -> do
-                isSuccessful <- liftIO $
+                accountM <- liftIO $
                     checkLogin dbConn accountName accountPassword
-                WS.sendTextData . prepareWSReply $
-                    case isSuccessful of
-                        True -> WSLoginSuccessful
-                        False -> WSLoginFailed "Unkown account or wrong password"
-                -- TODO: hand over to ClientHub
+                case accountM of
+                    Nothing ->
+                        WS.sendTextData . prepareWSReply $
+                            WSLoginFailed "Unkown account or wrong password"
+                    Just account -> do
+                        WS.sendTextData . prepareWSReply $ WSLoginSuccessful
+                        answerChan <- liftIO $
+                                        registerClientWithHub chHandle account
+                        combinationChan <- liftIO newChan
+                        sink <- WS.getSink
+                        _ <- liftIO . forkIO $ continueAuthenticated
+                                                combinationChan sink
+                                                chHandle account
+                        _ <- liftIO . forkIO $ forwardClientHubAnswers
+                                                    answerChan combinationChan
+                        processMessagesAuthenticated combinationChan
             _ -> do
                 WS.sendTextData . prepareWSReply $ WSNeedToBeAuthenticated
 
+processMessagesAuthenticated :: WS.TextProtocol p => Chan AuthenticatedEvent -> WS.WebSockets p b
+processMessagesAuthenticated combinationChan = forever $ do
+    msg <- WS.receiveData
+    let cmd = parseWSCommand msg :: Either String WebsocketCommand
+    case parseWSCommand msg of
+        Left errMsg ->
+            WS.sendTextData . prepareWSReply $
+                                    WSCommandNotUnderstood (T.pack errMsg)
+        Right cmd -> liftIO $ writeChan combinationChan (MessageFromClient cmd)
+
+forwardClientHubAnswers :: Chan ClientHubAnswer -> Chan AuthenticatedEvent -> IO ()
+forwardClientHubAnswers answerChan combinationChan = forever $ do
+    answer <- readChan answerChan
+    writeChan combinationChan $ MessageFromClientHub answer
+
+continueAuthenticated :: WS.TextProtocol p =>Chan AuthenticatedEvent-> WS.Sink p -> ClientHubHandle -> BridgewalkerAccount -> IO ()
+continueAuthenticated combinationChan sink chHandle account = forever $ do
+    combiMsg <- readChan combinationChan
+    case combiMsg of
+        MessageFromClient msg -> case msg of
+            WSRequestStatus -> requestClientStatus chHandle account
+            _ -> return ()
+        MessageFromClientHub msg -> case msg of
+            ForwardStatusToClient status ->
+                let wsData = WS.textData . prepareWSReply $ WSStatus status
+                in WS.sendSink sink wsData  -- TODO: check for exceptions
+                                            -- (or maybe already handled by Snap?)
 
 
 --            WSRequestStatus _ _ -> do   -- TODO: check hash

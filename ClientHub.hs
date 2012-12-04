@@ -3,6 +3,8 @@ module ClientHub
     ( compileClientStatus
     , initClientHub
     , ClientHubHandle
+    , registerClientWithHub
+    , requestClientStatus
     ) where
 
 import Control.Applicative
@@ -63,13 +65,14 @@ clientHubLoop (ClientHubHandle chChan) bwHandles = go I.empty
                     Just (cd@ClientData{}) -> do
                         status <- compileClientStatus bwHandles account
                         writeChan (cdAnswerChan cd) $ ForwardStatusToClient status
+                        go clientSet
 
 -- TODO: remove stale clients from time to time
 
 addClient :: I.IxSet ClientData-> BridgewalkerAccount-> Chan ClientHubAnswer-> IO (I.IxSet ClientData)
 addClient set account answerChan = do
     now <- getCurrentTime
-    return $ I.insert (ClientData account now answerChan) set
+    return $ I.updateIx account (ClientData account now answerChan) set
 
 registerClientWithHub :: ClientHubHandle -> BridgewalkerAccount -> IO (Chan ClientHubAnswer)
 registerClientWithHub (ClientHubHandle chChan) account = do
@@ -89,13 +92,14 @@ compileClientStatus bwHandles bwAccount = do
     let dbConn = bhDBConnCH bwHandles
         fetStateCopy = bhFilteredEventStateCopy bwHandles
         account = bAccount bwAccount
-    (btcIn, usdBalance) <- getClientDBStatus dbConn account
+    (btcIn, usdBalance, primaryBTCAddress) <- getClientDBStatus dbConn account
     fetState <- readMVar fetStateCopy
     let pendingTxs = map translatePendingTx
                         . filter ((==) magicAddress . RPC.tAddress . fst)
                         . MA.listPendingTransactions $ fetState
     let status = ClientStatus { csUSDBalance = usdBalance
                               , csBTCIn = btcIn
+                              , csPrimaryBTCAddress = primaryBTCAddress
                               , csPendingTxs = pendingTxs
                               }
     return status

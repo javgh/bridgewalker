@@ -89,14 +89,14 @@ getUSDBalance dbConn account = do
                         (Only account)
     return balance
 
-getClientDBStatus :: Connection -> Integer -> IO (Integer, Integer)
+getClientDBStatus :: Connection -> Integer -> IO (Integer, Integer, T.Text)
 getClientDBStatus dbConn account = do
     let errMsg = "Expected to find account " ++ show account
                     ++ " while doing getClientDBStatus, but failed."
-    (btcIn, usdBalance) <- expectOneRow errMsg <$>
-        query dbConn "select btc_in, usd_balance from accounts\
-                        \ where account_nr=?" (Only account)
-    return (btcIn, usdBalance)
+    status <- expectOneRow errMsg <$>
+        query dbConn "select btc_in, usd_balance, primary_btc_address\
+                        \ from accounts where account_nr=?" (Only account)
+    return status
 
 checkGuestNameExists :: Connection -> T.Text -> IO Bool
 checkGuestNameExists dbConn guestName = do
@@ -104,14 +104,16 @@ checkGuestNameExists dbConn guestName = do
                                 (Only guestName) :: IO [Only Integer]
     return $ length result > 0
 
-checkLogin :: Connection -> T.Text -> T.Text -> IO Bool
+checkLogin :: Connection -> T.Text -> T.Text -> IO (Maybe BridgewalkerAccount)
 checkLogin dbConn accountName accountPassword = do
-    result <- query dbConn "select account_pw from accounts\
+    result <- query dbConn "select account_nr, account_pw from accounts\
                                 \ where account_name=?" (Only accountName)
     case result of
-        [] -> return False
-        (Only pwHash:_) ->
-            return $ verifyPassword (T.encodeUtf8 accountPassword) pwHash
+        [] -> return Nothing
+        ((accountNr, pwHash):_) ->
+            if verifyPassword (T.encodeUtf8 accountPassword) pwHash
+                then return $ Just (BridgewalkerAccount accountNr)
+                else return Nothing
 
 getAccountNumber :: Connection -> T.Text -> IO Integer
 getAccountNumber dbConn accountName = do

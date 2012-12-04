@@ -70,6 +70,7 @@ newtype ClientHubHandle = ClientHubHandle { unCHH :: Chan ClientHubCommand }
 
 data ClientStatus = ClientStatus { csUSDBalance :: Integer
                                  , csBTCIn :: Integer
+                                 , csPrimaryBTCAddress :: T.Text
                                  , csPendingTxs :: [ClientPendingTransaction]
                                  }
                     deriving (Show)
@@ -108,8 +109,10 @@ instance ToJSON ClientStatus where
         let usdBalance = csUSDBalance cs
             btcIn = csBTCIn cs
             pendingTxs = csPendingTxs cs
+            primaryBTCAddress = csPrimaryBTCAddress cs
         in object [ "usd_balance" .= usdBalance
                   , "btc_in" .= btcIn
+                  , "primary_btc_address" .= primaryBTCAddress
                   , "pending_txs" .= pendingTxs
                   ]
 
