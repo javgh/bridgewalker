@@ -1,28 +1,33 @@
 {-# LANGUAGE OverloadedStrings, DeriveDataTypeable #-}
 module ClientHub
-    ( compileClientStatus
-    , initClientHub
+    ( initClientHub
     , ClientHubHandle
     , registerClientWithHub
     , requestClientStatus
+    , signalPossibleBitcoinEvents
     ) where
 
 import Control.Applicative
 import Control.Concurrent
 import Control.Monad
 import Data.Aeson
+import Database.PostgreSQL.Simple
+import Data.Foldable(foldl',foldlM)
 import Data.IxSet((@<), (@>=), (@=))
 import Data.Time.Clock
 import Data.Typeable
 
 import qualified Data.IxSet as I
+import qualified Data.Map as M
 import qualified Data.Text as T
 import qualified Network.BitcoinRPC as RPC
 import qualified Network.BitcoinRPC.Events.MarkerAddresses as MA
 
+import AddressUtils
 import CommonTypes
 import Config
 import DbUtils
+import LoggingUtils
 
 magicAddress = RPC.BitcoinAddress "1KmWJbRo4sjcQBFZN83KExVjBxTNxST6fL"
 
@@ -44,6 +49,10 @@ instance I.Indexable ClientData where
                     , I.ixFun $ \e -> [ cdLastKeepAlive e ]
                     ]
 
+type AddressCache = M.Map RPC.BitcoinAddress (Maybe BridgewalkerAccount)
+
+type AccountCache = M.Map BridgewalkerAccount [ClientPendingTransaction]
+
 initClientHub :: BridgewalkerHandles -> IO ClientHubHandle
 initClientHub bwHandles = do
     handle <- ClientHubHandle <$> newChan
@@ -51,21 +60,33 @@ initClientHub bwHandles = do
     return handle
 
 clientHubLoop ::  ClientHubHandle -> BridgewalkerHandles -> IO ()
-clientHubLoop (ClientHubHandle chChan) bwHandles = go I.empty
+clientHubLoop (ClientHubHandle chChan) bwHandles = do
+    (accountCache, addressCache) <-
+        updatePendingInfos bwHandles M.empty
+    go I.empty addressCache accountCache
   where
-    go clientSet = do
+    go clientSet addressCache accountCache = do
+        let logger = bhAppLogger bwHandles
         msg <- readChan chChan
         case msg of
             RegisterClient account answerChan -> do
                 clientSet' <- addClient clientSet account answerChan
-                go clientSet'
+                logger $ UserLoggedIn (bAccount account)
+                go clientSet' addressCache accountCache
             RequestClientStatus account -> do
                 case I.getOne (clientSet @= account) of
-                    Nothing -> go clientSet
-                    Just (cd@ClientData{}) -> do
-                        status <- compileClientStatus bwHandles account
-                        writeChan (cdAnswerChan cd) $ ForwardStatusToClient status
-                        go clientSet
+                    Nothing -> go clientSet addressCache accountCache
+                    Just client -> do
+                        sendClientStatus bwHandles accountCache client
+                        go clientSet addressCache accountCache
+            SignalPossibleBitcoinEvents -> do
+                (accountCache', addressCache') <-
+                    updatePendingInfos bwHandles addressCache
+                let affectedClients =
+                        findAffectedClients (I.toList clientSet) accountCache
+                                                                   accountCache'
+                mapM_ (sendClientStatus bwHandles accountCache') affectedClients
+                go clientSet addressCache' accountCache'
 
 -- TODO: remove stale clients from time to time
 
@@ -87,24 +108,72 @@ requestClientStatus (ClientHubHandle chChan) account = do
     writeChan chChan $ RequestClientStatus account
     return ()
 
-compileClientStatus :: BridgewalkerHandles -> BridgewalkerAccount -> IO ClientStatus
-compileClientStatus bwHandles bwAccount = do
+signalPossibleBitcoinEvents :: ClientHubHandle -> IO ()
+signalPossibleBitcoinEvents (ClientHubHandle chChan) = do
+    writeChan chChan $ SignalPossibleBitcoinEvents
+    return ()
+
+sendClientStatus :: BridgewalkerHandles-> AccountCache-> ClientData-> IO ()
+sendClientStatus bwHandles accountCache client = do
     let dbConn = bhDBConnCH bwHandles
-        fetStateCopy = bhFilteredEventStateCopy bwHandles
-        account = bAccount bwAccount
-    (btcIn, usdBalance, primaryBTCAddress) <- getClientDBStatus dbConn account
-    fetState <- readMVar fetStateCopy
-    let pendingTxs = map translatePendingTx
-                        . filter ((==) magicAddress . RPC.tAddress . fst)
-                        . MA.listPendingTransactions $ fetState
+        account = cdAccount client
+        answerChan = cdAnswerChan client
+    (btcIn, usdBalance, primaryBTCAddress) <-
+        getClientDBStatus dbConn (bAccount account)
+    let pendingTxs = case M.lookup account accountCache of
+                        Just vs -> vs
+                        Nothing -> []
     let status = ClientStatus { csUSDBalance = usdBalance
                               , csBTCIn = btcIn
                               , csPrimaryBTCAddress = primaryBTCAddress
                               , csPendingTxs = pendingTxs
                               }
-    return status
+    writeChan answerChan $ ForwardStatusToClient status
+
+findAffectedClients :: [ClientData]-> AccountCache -> AccountCache -> [ClientData]
+findAffectedClients clients oldAccountCache newAccountCache =
+    concatMap go clients
   where
-    translatePendingTx (tx, reason) =
+    go client =
+        let account = cdAccount client
+        in if M.lookup account oldAccountCache == M.lookup account newAccountCache
+            then []
+            else [client]
+
+updatePendingInfos :: BridgewalkerHandles-> AddressCache -> IO (AccountCache, AddressCache)
+updatePendingInfos bwHandles addressCache = do
+    let dbConn = bhDBConnCH bwHandles
+        fetStateCopy = bhFilteredEventStateCopy bwHandles
+    fetState <- readMVar fetStateCopy
+    let pendingTxs = MA.listPendingTransactions fetState
+    (augPendingTxs, updatedAddressCache) <-
+        foldlM (augmentPendingTxs dbConn addressCache) ([], M.empty) pendingTxs
+    let updatedAccountCache = foldl' rebuildAccountCache M.empty augPendingTxs
+    return (updatedAccountCache, updatedAddressCache)
+
+augmentPendingTxs :: Connection-> AddressCache -> ([(Maybe BridgewalkerAccount, (RPC.Transaction, b))],M.Map RPC.BitcoinAddress (Maybe BridgewalkerAccount))-> (RPC.Transaction, b)-> IO([(Maybe BridgewalkerAccount, (RPC.Transaction, b))],AddressCache)
+augmentPendingTxs dbConn addressCache (augPendingTxs, updatedAddressCache) pendingTx = do
+    let addr = RPC.tAddress . fst $ pendingTx
+    case M.lookup addr addressCache of
+        Just v -> return $ ((v, pendingTx) : augPendingTxs,
+                                M.insert addr v updatedAddressCache)
+        Nothing -> do
+            mAccount <- getAccountByAddress dbConn (adjustAddr addr)
+            return $ ((mAccount, pendingTx) : augPendingTxs,
+                        M.insert addr mAccount updatedAddressCache)
+
+rebuildAccountCache :: AccountCache -> (Maybe BridgewalkerAccount, (RPC.Transaction, MA.PendingReason))-> AccountCache
+rebuildAccountCache accountCache augPendingTx =
+    let (mAccount, (tx, reason)) = augPendingTx
+    in case mAccount of
+        Nothing -> accountCache
+        Just account ->
+            let tPendingTx = translatePendingTx tx reason
+            in case M.lookup account accountCache of
+                Nothing -> M.insert account [tPendingTx] accountCache
+                Just vs -> M.insert account (tPendingTx:vs) accountCache
+  where
+    translatePendingTx tx reason =
         let amount = RPC.btcAmount . RPC.tAmount $ tx
             cReason = case reason of
                         MA.TooFewConfirmations confs ->

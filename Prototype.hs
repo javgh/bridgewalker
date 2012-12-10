@@ -129,6 +129,7 @@ actOnDeposits bwHandles =
         fetStateCopy = bhFilteredEventStateCopy bwHandles
         dbConn = bhDBConnFBET bwHandles
         patHandle = bhPendingActionsTrackerHandle bwHandles
+        chHandle = bhClientHubHandle bwHandles
     in forever $ do
         (fetState, fEvents) <- waitForFilteredBitcoinEvents fbetHandle
         let actions = concatMap convertToActions fEvents
@@ -142,6 +143,7 @@ actOnDeposits bwHandles =
             _ <- swapMVar fetStateCopy fetState
             return ()
         nudgePendingActionsTracker patHandle
+        signalPossibleBitcoinEvents chHandle
   where
     convertToActions fTx@FilteredNewTransaction{} =
         let amount = adjustAmount . tAmount . fntTx $ fTx

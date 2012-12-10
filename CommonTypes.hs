@@ -65,6 +65,7 @@ data ClientHubCommand = RegisterClient { chcAccount :: BridgewalkerAccount
                                        , chcAnswerChan :: Chan ClientHubAnswer
                                        }
                       | RequestClientStatus { chcAccount :: BridgewalkerAccount }
+                      | SignalPossibleBitcoinEvents
 
 newtype ClientHubHandle = ClientHubHandle { unCHH :: Chan ClientHubCommand }
 
@@ -79,12 +80,12 @@ data ClientPendingTransaction = ClientPendingTransaction
                                     { cptAmount :: Integer
                                     , cptReason :: ClientPendingReason
                                     }
-                                deriving (Show)
+                                deriving (Show, Eq)
 
 data ClientPendingReason = TooFewConfirmations { cprConfs :: Integer }
                          | MarkerAddressLimitReached
                                 { cprMarkerAddress :: T.Text }
-                         deriving (Show)
+                         deriving (Show, Eq)
 
 instance ToJSON ClientPendingReason where
     toJSON (TooFewConfirmations confs) =
