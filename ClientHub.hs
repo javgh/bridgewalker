@@ -5,6 +5,7 @@ module ClientHub
     , registerClientWithHub
     , requestClientStatus
     , signalPossibleBitcoinEvents
+    , signalAccountUpdates
     ) where
 
 import Control.Applicative
@@ -87,6 +88,13 @@ clientHubLoop (ClientHubHandle chChan) bwHandles = do
                                                                    accountCache'
                 mapM_ (sendClientStatus bwHandles accountCache') affectedClients
                 go clientSet addressCache' accountCache'
+            SignalAccountUpdates accounts -> do
+                forM accounts $ \account -> do
+                    case I.getOne (clientSet @= account) of
+                        Nothing -> return ()
+                        Just client ->
+                            sendClientStatus bwHandles accountCache client
+                go clientSet addressCache accountCache
 
 -- TODO: remove stale clients from time to time
 
@@ -111,6 +119,11 @@ requestClientStatus (ClientHubHandle chChan) account = do
 signalPossibleBitcoinEvents :: ClientHubHandle -> IO ()
 signalPossibleBitcoinEvents (ClientHubHandle chChan) = do
     writeChan chChan $ SignalPossibleBitcoinEvents
+    return ()
+
+signalAccountUpdates :: ClientHubHandle -> [BridgewalkerAccount] -> IO ()
+signalAccountUpdates (ClientHubHandle chChan) accounts = do
+    writeChan chChan $ SignalAccountUpdates accounts
     return ()
 
 sendClientStatus :: BridgewalkerHandles-> AccountCache-> ClientData-> IO ()

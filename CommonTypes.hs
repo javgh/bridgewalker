@@ -64,8 +64,11 @@ data ClientHubAnswer = ForwardStatusToClient ClientStatus
 data ClientHubCommand = RegisterClient { chcAccount :: BridgewalkerAccount
                                        , chcAnswerChan :: Chan ClientHubAnswer
                                        }
-                      | RequestClientStatus { chcAccount :: BridgewalkerAccount }
+                      | RequestClientStatus { chcAccount ::
+                                                    BridgewalkerAccount }
                       | SignalPossibleBitcoinEvents
+                      | SignalAccountUpdates { chcAccounts ::
+                                                    [BridgewalkerAccount] }
 
 newtype ClientHubHandle = ClientHubHandle { unCHH :: Chan ClientHubCommand }
 
