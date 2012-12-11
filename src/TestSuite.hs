@@ -2,8 +2,8 @@ module Main where
 
 import Test.Framework
 
-import ScrambleCredentialsTests
 import RebalancerTests
+import ScrambleCredentialsTests
 
 tests :: [Test]
 tests = scrambleCredentialsTests ++ rebalancerTests

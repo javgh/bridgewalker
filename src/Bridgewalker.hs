@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Prototype where
+module Bridgewalker where
 
 import Control.Applicative
 import Control.Concurrent
