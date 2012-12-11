@@ -1,7 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Bridgewalker
     ( initBridgewalker
-    , runBridgewalker
     ) where
 
 import Control.Applicative
@@ -45,7 +44,7 @@ periodicNudging patHandle = forever $ do
 
 initBridgewalkerHandles :: B.ByteString -> IO BridgewalkerHandles
 initBridgewalkerHandles connectInfo = do
-    appLogger <- initLogger
+    (lHandle, appLogger) <- initLogging
     let watchdogLogger = adapt appLogger
     bwConfig <- readConfig
     let maConfig = bcMarkerAddresses bwConfig
@@ -68,7 +67,8 @@ initBridgewalkerHandles connectInfo = do
                                     (bcSafetyMarginBTC bwConfig)
     _ <- forkIO $ periodicRebalancing rbHandle
     let preliminaryBWHandles =
-            BridgewalkerHandles { bhAppLogger = appLogger
+            BridgewalkerHandles { bhLoggingHandle = lHandle
+                                , bhAppLogger = appLogger
                                 , bhWatchdogLogger = watchdogLogger
                                 , bhConfig = bwConfig
                                 , bhDBConnPAT = dbConn1
@@ -154,12 +154,10 @@ actOnDeposits bwHandles =
     convertToActions _ = []
 
 initBridgewalker :: IO BridgewalkerHandles
-initBridgewalker = initBridgewalkerHandles myConnectInfo
-
-runBridgewalker :: BridgewalkerHandles -> IO ()
-runBridgewalker bwHandles = do
+initBridgewalker = do
+    bwHandles <- initBridgewalkerHandles myConnectInfo
     _ <- forkIO $ actOnDeposits bwHandles
-    return ()
+    return bwHandles
 
 -- TODO: Find bug - either: something related to standard transactions
 --                      or: something related to marker transactions, that

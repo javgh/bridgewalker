@@ -36,7 +36,8 @@ data BridgewalkerConfig = BridgewalkerConfig
                             }
 
 data BridgewalkerHandles = BridgewalkerHandles
-                            { bhAppLogger :: Logger
+                            { bhLoggingHandle :: LoggingHandle
+                            , bhAppLogger :: Logger
                             , bhWatchdogLogger :: WatchdogLogger
                             , bhConfig :: BridgewalkerConfig
                             , bhDBConnPAT :: Connection

@@ -71,7 +71,6 @@ import           Snap.Loader.Static
 main :: IO ()
 main = do
     bwHandles <- initBridgewalker
-    runBridgewalker bwHandles
     let myGetActions = getActions bwHandles
 
     -- Depending on the version of loadSnapTH in scope, this either enables

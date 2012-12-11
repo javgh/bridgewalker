@@ -12,6 +12,11 @@ module CommonTypes
     , ClientPendingTransaction(..)
     , ClientPendingReason(..)
     , ClientHubAnswer(..)
+    , LoggingHandle(..)
+    , Logger
+    , LoggingCmd(..)
+    , LogContent(..)
+    , LogEntry(..)
     , confsNeededForSending
     , SnapApp(..)
     , SnapAppHandler
@@ -94,6 +99,60 @@ data ClientPendingReason = TooFewConfirmations { cprConfs :: Integer }
                          | MarkerAddressLimitReached
                                 { cprMarkerAddress :: T.Text }
                          deriving (Show, Eq)
+
+data LoggingCmd = PerformLogging LogContent
+
+newtype LoggingHandle = LoggingHandle { unLH :: Chan LoggingCmd }
+
+type Logger = LogContent -> IO ()
+
+data LogContent = RebalancerFailure { lcInfo :: String }
+                | RebalancerStatus { lcRLevel :: Integer
+                                   , lcRWillAct :: Bool
+                                   , lcInfo :: String
+                                   }
+                | RebalancerAction { lcInfo :: String }
+                | DepositProcessed { lcAccount :: Integer
+                                   , lcInfo :: String
+                                   }
+                | SystemDepositProcessed { lcInfo :: String }
+                | BTCSold { lcAccount :: Integer
+                          , lcInfo :: String
+                          }
+                | BTCBought { lcAccount :: Integer
+                            , lcInfo :: String
+                            }
+                | MtGoxLowBTCBalance { lcInfo :: String }
+                | MtGoxError { lcInfo :: String }
+                | BitcoindLowBTCBalance { lcInfo :: String }
+                | BTCSent { lcAccount :: Integer
+                          , lcInfo :: String
+                          }
+                | BTCSendNetworkOrParseError
+                    { lcAccount :: Integer
+                    , lcAddress :: String
+                    , lcAmount :: Integer
+                    , lcInfo :: String
+                    }
+                | BTCSendError { lcAccount :: Integer
+                               , lcAddress :: String
+                               , lcAmount :: Integer
+                               , lcInfo :: String
+                               }
+                | GuestAccountCreated { lcAccountName :: String }
+                | UserLoggedIn { lcAccount :: Integer }
+                | WatchdogError { lcInfo :: String }
+                | LogMisc { lcInfo :: String }
+                deriving (Generic, Show)
+
+data LogEntry = LogEntry { _leTimestamp :: UTCTime
+                         , _leContent :: LogContent
+                         }
+                deriving (Generic, Show)
+
+instance Serialize LogContent
+
+instance Serialize LogEntry
 
 instance ToJSON ClientPendingReason where
     toJSON (TooFewConfirmations confs) =
