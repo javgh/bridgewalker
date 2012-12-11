@@ -23,6 +23,9 @@ import           Snap.Snaplet
 import           Snap.Snaplet.Config
 import           Snap.Core
 import           System.IO
+
+import           Bridgewalker
+import           Config
 import           SnapSite
 
 #ifdef DEVELOPMENT
@@ -67,13 +70,17 @@ import           Snap.Loader.Static
 --
 main :: IO ()
 main = do
+    bwHandles <- initBridgewalker
+    runBridgewalker bwHandles
+    let myGetActions = getActions bwHandles
+
     -- Depending on the version of loadSnapTH in scope, this either enables
     -- dynamic reloading, or compiles it without. The last argument to
     -- loadSnapTH is a list of additional directories to watch for changes to
     -- trigger reloads in development mode. It doesn't need to include source
     -- directories, those are picked up automatically by the splice.
     (conf, site, cleanup) <- $(loadSnapTH [| getConf |]
-                                          'getActions
+                                          'myGetActions
                                           ["snaplets/heist/templates"])
 
     _ <- try $ httpServe conf site :: IO (Either SomeException ())
@@ -106,9 +113,9 @@ getConf = commandLineAppConfig defaultConfig
 --
 -- This sample doesn't actually use the config passed in, but more
 -- sophisticated code might.
-getActions :: Config Snap AppConfig -> IO (Snap (), IO ())
-getActions conf = do
+getActions :: BridgewalkerHandles -> Config Snap AppConfig -> IO (Snap (), IO ())
+getActions bwHandles conf = do
     (msgs, site, cleanup) <- runSnaplet
-        (appEnvironment =<< getOther conf) snapApp
+        (appEnvironment =<< getOther conf) (snapApp bwHandles)
     hPutStrLn stderr $ T.unpack msgs
     return (site, cleanup)

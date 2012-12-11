@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
-module WebsocketPrototype
-    ( runWebsocketServer
+module WebsocketBackend
+    ( websocketBackend
     ) where
 
 import Control.Applicative
@@ -142,8 +142,8 @@ parseWSCommand cmd =
         Right (Error _) -> Left "Malformed command"
         Right (Success d) -> Right d
 
-webSocketApp :: BridgewalkerHandles -> WS.Request -> WS.WebSockets WS.Hybi00 ()
-webSocketApp bwHandles rq = do
+websocketBackend :: BridgewalkerHandles -> WS.Request -> WS.WebSockets WS.Hybi00 ()
+websocketBackend bwHandles rq = do
     WS.acceptRequest rq
     forever $ processMessages bwHandles
 
@@ -285,9 +285,9 @@ addBuyAction dbConn action = withTransaction dbConn $ do
     let paState' = addPendingActions paState [action]
     writePendingActionsStateToDB dbConn paState'
 
-runWebsocketServer :: BridgewalkerHandles -> IO ()
-runWebsocketServer bwHandles =
-    WS.runServer "0.0.0.0" 9160 $ webSocketApp bwHandles
+--runWebsocketServer :: BridgewalkerHandles -> IO ()
+--runWebsocketServer bwHandles =
+--    WS.runServer "0.0.0.0" 9160 $ webSocketApp bwHandles
 
 
 --application :: MVar ServerState -> WS.Request -> WS.WebSockets WS.Hybi00 ()

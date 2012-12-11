@@ -23,15 +23,19 @@ import qualified Network.WebSockets.Snap as WS
 import qualified Text.XmlHtml as X
 
 import CommonTypes
+import Config
+import WebsocketBackend
 
 websocketPingInterval :: Int
 websocketPingInterval = 30
 
 -- | The application's routes.
-routes :: [(ByteString, Handler SnapApp SnapApp ())]
-routes = [ ("", serveDirectory "static")
-         , ("/backend", liftSnap (WS.runWebSocketsSnap webSocketApp))
-         ]
+routes :: BridgewalkerHandles -> [(ByteString, Handler SnapApp SnapApp ())]
+routes bwHandles =
+    [ ("", serveDirectory "static")
+    , ("/deadend", liftSnap (WS.runWebSocketsSnap webSocketApp))
+    , ("/backend", liftSnap (WS.runWebSocketsSnap (websocketBackend bwHandles)))
+    ]
 
 fortyTwoSplice :: SnapletHeist SnapApp SnapApp [X.Node]
 fortyTwoSplice = return [X.TextNode $ "42"]
@@ -53,9 +57,9 @@ webSocketApp rq = do
 
 ------------------------------------------------------------------------------
 -- | The application initializer.
-snapApp :: SnapletInit SnapApp SnapApp
-snapApp = makeSnaplet "app" "An snaplet example application." Nothing $ do
+snapApp :: BridgewalkerHandles -> SnapletInit SnapApp SnapApp
+snapApp bwHandles = makeSnaplet "bridgewalker" "Bridgewalker" Nothing $ do
     h <- nestSnaplet "" heist $ heistInit "templates"
-    addRoutes routes
+    addRoutes $ routes bwHandles
     addSplices [ ("fortytwo", fortyTwoSplice) ]
     return $ SnapApp h

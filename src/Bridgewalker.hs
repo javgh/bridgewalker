@@ -1,5 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Bridgewalker where
+module Bridgewalker
+    ( initBridgewalker
+    , runBridgewalker
+    ) where
 
 import Control.Applicative
 import Control.Concurrent
@@ -22,7 +25,6 @@ import DbUtils
 import LoggingUtils
 import PendingActionsTracker
 import Rebalancer
-import WebsocketPrototype
 
 import qualified PendingActionsTracker as PAT
 
@@ -151,12 +153,13 @@ actOnDeposits bwHandles =
         in [DepositAction { baAmount = amount, PAT.baAddress = address }]
     convertToActions _ = []
 
-main :: IO ()
-main = do
-    bwHandles <- initBridgewalkerHandles myConnectInfo
-    _ <- forkIO $ runWebsocketServer bwHandles
-    --justCatchUp bwHandles
-    actOnDeposits bwHandles
+initBridgewalker :: IO BridgewalkerHandles
+initBridgewalker = initBridgewalkerHandles myConnectInfo
+
+runBridgewalker :: BridgewalkerHandles -> IO ()
+runBridgewalker bwHandles = do
+    _ <- forkIO $ actOnDeposits bwHandles
+    return ()
 
 -- TODO: Find bug - either: something related to standard transactions
 --                      or: something related to marker transactions, that
@@ -165,7 +168,3 @@ main = do
 --                      or: a combination of these (?)
 --                      ---> try to design a unit test that involves shutting
 --                      down and restarting from database after each step
---
---main = connectPostgreSQL myConnectInfo >>= \conn -> do
---    fetS <- readBitcoindStateFromDB conn
---    writeBitcoindStateToDB conn fetS
