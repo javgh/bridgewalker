@@ -1,0 +1,63 @@
+{-# LANGUAGE OverloadedStrings #-}
+
+-- | This module is where all the routes and handlers are defined for your
+-- site. The 'app' function is the initializer that combines everything
+-- together and is exported by this module.
+module Site
+  ( app
+  ) where
+
+import Data.Aeson
+import Data.Aeson.Types
+import Data.ByteString (ByteString)
+import Snap.Core
+import Snap.Snaplet
+import Snap.Snaplet.Heist
+import Snap.Util.FileServe
+import Text.Templating.Heist
+
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as BL
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
+import qualified Network.WebSockets as WS
+import qualified Network.WebSockets.Snap as WS
+import qualified Text.XmlHtml as X
+
+import Application
+
+websocketPingInterval :: Int
+websocketPingInterval = 30
+
+-- | The application's routes.
+routes :: [(ByteString, Handler App App ())]
+routes = [ ("", serveDirectory "static")
+         , ("/backend", liftSnap (WS.runWebSocketsSnap webSocketApp))
+         ]
+
+fortyTwoSplice :: SnapletHeist App App [X.Node]
+fortyTwoSplice = return [X.TextNode $ "42"]
+
+toStrict :: BL.ByteString -> B.ByteString
+toStrict = B.concat . BL.toChunks
+
+prepareWSReply :: ToJSON a => a -> T.Text
+prepareWSReply = T.decodeUtf8 . toStrict . encode
+
+webSocketApp :: WS.Request -> WS.WebSockets WS.Hybi10 ()
+webSocketApp rq = do
+    let notUnderstood = object [ "reply" .= ("not_understood" :: T.Text)
+                               , "info" .= ("not implemented yet" :: T.Text)
+                               ]
+    WS.acceptRequest rq
+    WS.spawnPingThread websocketPingInterval
+    WS.sendTextData . prepareWSReply $ notUnderstood
+
+------------------------------------------------------------------------------
+-- | The application initializer.
+app :: SnapletInit App App
+app = makeSnaplet "app" "An snaplet example application." Nothing $ do
+    h <- nestSnaplet "" heist $ heistInit "templates"
+    addRoutes routes
+    addSplices [ ("fortytwo", fortyTwoSplice) ]
+    return $ App h
