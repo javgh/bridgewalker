@@ -3,18 +3,16 @@
 -- | This module is where all the routes and handlers are defined for your
 -- site. The 'app' function is the initializer that combines everything
 -- together and is exported by this module.
-module Site
-  ( app
+module SnapSite
+  ( snapApp
   ) where
 
 import Data.Aeson
-import Data.Aeson.Types
 import Data.ByteString (ByteString)
 import Snap.Core
 import Snap.Snaplet
 import Snap.Snaplet.Heist
 import Snap.Util.FileServe
-import Text.Templating.Heist
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
@@ -24,18 +22,18 @@ import qualified Network.WebSockets as WS
 import qualified Network.WebSockets.Snap as WS
 import qualified Text.XmlHtml as X
 
-import Application
+import CommonTypes
 
 websocketPingInterval :: Int
 websocketPingInterval = 30
 
 -- | The application's routes.
-routes :: [(ByteString, Handler App App ())]
+routes :: [(ByteString, Handler SnapApp SnapApp ())]
 routes = [ ("", serveDirectory "static")
          , ("/backend", liftSnap (WS.runWebSocketsSnap webSocketApp))
          ]
 
-fortyTwoSplice :: SnapletHeist App App [X.Node]
+fortyTwoSplice :: SnapletHeist SnapApp SnapApp [X.Node]
 fortyTwoSplice = return [X.TextNode $ "42"]
 
 toStrict :: BL.ByteString -> B.ByteString
@@ -55,9 +53,9 @@ webSocketApp rq = do
 
 ------------------------------------------------------------------------------
 -- | The application initializer.
-app :: SnapletInit App App
-app = makeSnaplet "app" "An snaplet example application." Nothing $ do
+snapApp :: SnapletInit SnapApp SnapApp
+snapApp = makeSnaplet "app" "An snaplet example application." Nothing $ do
     h <- nestSnaplet "" heist $ heistInit "templates"
     addRoutes routes
     addSplices [ ("fortytwo", fortyTwoSplice) ]
-    return $ App h
+    return $ SnapApp h

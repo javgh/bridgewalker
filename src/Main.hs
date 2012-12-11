@@ -23,7 +23,7 @@ import           Snap.Snaplet
 import           Snap.Snaplet.Config
 import           Snap.Core
 import           System.IO
-import           Site
+import           SnapSite
 
 #ifdef DEVELOPMENT
 import           Snap.Loader.Dynamic
@@ -109,6 +109,6 @@ getConf = commandLineAppConfig defaultConfig
 getActions :: Config Snap AppConfig -> IO (Snap (), IO ())
 getActions conf = do
     (msgs, site, cleanup) <- runSnaplet
-        (appEnvironment =<< getOther conf) app
+        (appEnvironment =<< getOther conf) snapApp
     hPutStrLn stderr $ T.unpack msgs
     return (site, cleanup)

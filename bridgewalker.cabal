@@ -35,7 +35,12 @@ Executable bridgewalker
     time >= 1.1 && < 1.5,
     websockets == 0.7.*,
     websockets-snap == 0.7.*,
-    xmlhtml >= 0.1
+    xmlhtml >= 0.1,
+    bitcoin-rpc == 0.1.*,
+    containers == 0.4.*,
+    cereal == 0.3.*,
+    ghc-prim
+
 
   if flag(development)
     build-depends:

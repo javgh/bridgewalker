@@ -1,6 +1,6 @@
 -- This module is necessary to avoid cyclic imports in some cases.
 -- Unfortunately it leaks more than is necessary.
-{-# LANGUAGE DeriveGeneric, OverloadedStrings, DeriveDataTypeable #-}
+{-# LANGUAGE DeriveGeneric, OverloadedStrings, DeriveDataTypeable, TemplateHaskell #-}
 module CommonTypes
     ( PendingActionsTrackerHandle(..)
     , PendingActionsState(..)
@@ -13,17 +13,22 @@ module CommonTypes
     , ClientPendingReason(..)
     , ClientHubAnswer(..)
     , confsNeededForSending
+    , SnapApp(..)
+    , SnapAppHandler
+    , heist
     ) where
 
 import Control.Applicative
 import Control.Concurrent
 import Control.Monad
 import Data.Aeson
+import Data.Lens.Template
 import Data.Serialize
 import Data.Time
-import Data.Time.Clock
 import Data.Typeable
 import GHC.Generics
+import Snap.Snaplet
+import Snap.Snaplet.Heist
 
 import qualified Data.Sequence as S
 import qualified Data.Text as T
@@ -137,6 +142,17 @@ instance Serialize BridgewalkerAccount
 instance Serialize BridgewalkerAction
 
 instance Serialize PendingActionsState
+
+data SnapApp = SnapApp
+    { _heist :: Snaplet (Heist SnapApp)
+    }
+
+makeLens ''SnapApp
+
+instance HasHeist SnapApp where
+    heistLens = subSnaplet heist
+
+type SnapAppHandler = Handler SnapApp SnapApp
 
 confsNeededForSending :: Integer
 confsNeededForSending = 3
