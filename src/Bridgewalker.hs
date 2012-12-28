@@ -114,7 +114,7 @@ tryToSellBtc mtgoxHandles safetyMargin amount = runEitherT $ do
     privateInfo <- noteT "Unable to call getPrivateInfoR"
                     . MaybeT $ callHTTPApi mtgoxHandles getPrivateInfoR
     _ <- tryAssert "Not enough funds available at MtGox to sell BTC"
-            (piBtcBalance privateInfo >= adjustAmount amount + safetyMargin) ()
+            (piBtcBalance privateInfo >= adjustAmount amount + safetyMargin)
     orderStats <- EitherT $
         callHTTPApi mtgoxHandles submitOrder
             OrderTypeSellBTC (adjustAmount amount)
@@ -144,8 +144,9 @@ actOnDeposits bwHandles =
             writePendingActionsStateToDB dbConn paState'
             _ <- swapMVar fetStateCopy fetState
             return ()
-        nudgePendingActionsTracker patHandle
-        signalPossibleBitcoinEvents chHandle
+        unless (null actions) $ do
+            nudgePendingActionsTracker patHandle
+            signalPossibleBitcoinEvents chHandle
   where
     convertToActions fTx@FilteredNewTransaction{} =
         let amount = adjustAmount . tAmount . fntTx $ fTx

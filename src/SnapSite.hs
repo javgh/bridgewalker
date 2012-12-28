@@ -37,8 +37,8 @@ routes bwHandles =
     , ("/backend", liftSnap (WS.runWebSocketsSnap (websocketBackend bwHandles)))
     ]
 
-fortyTwoSplice :: SnapletHeist SnapApp SnapApp [X.Node]
-fortyTwoSplice = return [X.TextNode $ "42"]
+--fortyTwoSplice :: SnapletHeist SnapApp SnapApp [X.Node]
+--fortyTwoSplice = return [X.TextNode $ "42"]
 
 toStrict :: BL.ByteString -> B.ByteString
 toStrict = B.concat . BL.toChunks
@@ -61,5 +61,5 @@ snapApp :: BridgewalkerHandles -> SnapletInit SnapApp SnapApp
 snapApp bwHandles = makeSnaplet "bridgewalker" "Bridgewalker" Nothing $ do
     h <- nestSnaplet "" heist $ heistInit "templates"
     addRoutes $ routes bwHandles
-    addSplices [ ("fortytwo", fortyTwoSplice) ]
+    --addSplices [ ("fortytwo", fortyTwoSplice) ]
     return $ SnapApp h

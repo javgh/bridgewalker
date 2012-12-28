@@ -25,9 +25,9 @@ module CommonTypes
 
 import Control.Applicative
 import Control.Concurrent
+import Control.Lens hiding ((.=))
 import Control.Monad
 import Data.Aeson
-import Data.Lens.Template
 import Data.Serialize
 import Data.Time
 import Data.Typeable
@@ -206,7 +206,7 @@ data SnapApp = SnapApp
     { _heist :: Snaplet (Heist SnapApp)
     }
 
-makeLens ''SnapApp
+makeLenses ''SnapApp
 
 instance HasHeist SnapApp where
     heistLens = subSnaplet heist

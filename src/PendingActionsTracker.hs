@@ -348,7 +348,7 @@ tryToExecuteSellOrder mtgoxHandles safetyMarginBTC amount = runEitherT $ do
     privateInfo <- noteT (MtGoxCallError "Unable to call getPrivateInfoR.")
                     . MaybeT $ callHTTPApi mtgoxHandles getPrivateInfoR
     _ <- tryAssert MtGoxLowBalance
-            (piBtcBalance privateInfo >= amount + safetyMarginBTC) ()
+            (piBtcBalance privateInfo >= amount + safetyMarginBTC)
     orderStats <- EitherT $
         adjustMtGoxError <$> callHTTPApi mtgoxHandles submitOrder
                                 OrderTypeSellBTC amount
@@ -359,7 +359,7 @@ tryToExecuteBuyOrder mtgoxHandles safetyMarginUSD amountBTC amountUSD = runEithe
     privateInfo <- noteT (MtGoxCallError "Unable to call getPrivateInfoR.")
                     . MaybeT $ callHTTPApi mtgoxHandles getPrivateInfoR
     _ <- tryAssert MtGoxLowBalance
-            (piUsdBalance privateInfo >= amountUSD + safetyMarginUSD) ()
+            (piUsdBalance privateInfo >= amountUSD + safetyMarginUSD)
     orderStats <- EitherT $
         adjustMtGoxError <$> callHTTPApi mtgoxHandles submitOrder
                                 OrderTypeBuyBTC amountBTC
