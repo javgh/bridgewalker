@@ -220,7 +220,7 @@ continueAuthenticated combinationChan sink chHandle account = forever $ do
     case combiMsg of
         MessageFromClient msg -> case msg of
             WSRequestStatus -> requestClientStatus chHandle account
-
+            WSPing -> receivedPing chHandle account
             _ -> let wsData = WS.textData . prepareWSReply $
                                 WSCommandNotAvailable "Command not available\
                                                       \ after login."

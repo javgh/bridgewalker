@@ -6,6 +6,7 @@ module ClientHub
     , requestClientStatus
     , signalPossibleBitcoinEvents
     , signalAccountUpdates
+    , receivedPing
     ) where
 
 import Control.Applicative
@@ -33,7 +34,7 @@ import LoggingUtils
 magicAddress = RPC.BitcoinAddress "1KmWJbRo4sjcQBFZN83KExVjBxTNxST6fL"
 
 timeoutInSeconds :: Int
-timeoutInSeconds = 5 --25
+timeoutInSeconds = 30
 
 data ClientData = ClientData { cdAccount :: BridgewalkerAccount
                              , cdLastKeepAlive :: UTCTime
