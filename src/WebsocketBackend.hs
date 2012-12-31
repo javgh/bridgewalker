@@ -59,10 +59,12 @@ data WebsocketCommand = WSSendBTC { wcSessionID :: T.Text
                                 , wcAccountPassword :: T.Text
                                 }
                       | WSRequestStatus
+                      | WSPing
                       deriving (Show)
 
 data WebsocketReply = WSStatus { wrStatus :: ClientStatus }
                     | WSCommandNotUnderstood { wrInfo :: T.Text }
+                    | WSCommandNotAvailable { wrInfo :: T.Text }
                     | WSNeedToBeAuthenticated
                     | WSServerVersion { wrServerVersion :: T.Text }
                     | WSGuestAccountCreated { wrAccountName :: T.Text
@@ -70,6 +72,7 @@ data WebsocketReply = WSStatus { wrStatus :: ClientStatus }
                                             }
                     | WSLoginSuccessful
                     | WSLoginFailed { wrReason :: T.Text }
+                    | WSPong
                     deriving (Show)
 
 data AuthenticatedEvent = MessageFromClient WebsocketCommand
@@ -86,6 +89,7 @@ instance FromJSON WebsocketCommand
         Just "create_guest_account" -> return WSCreateGuestAccount
         Just "login" -> WSLogin <$> o .: "account_name"
                                 <*> o .: "account_password"
+        Just "ping" -> return WSPing
         Just _ -> mzero
         Nothing -> mzero
     parseJSON _ = mzero
@@ -98,6 +102,10 @@ instance ToJSON WebsocketReply
                ]
     toJSON (WSCommandNotUnderstood info) =
         object [ "reply" .= ("not_understood" :: T.Text)
+               , "info" .= info
+               ]
+    toJSON (WSCommandNotAvailable info) =
+        object [ "reply" .= ("not_available" :: T.Text)
                , "info" .= info
                ]
     toJSON WSNeedToBeAuthenticated =
@@ -117,6 +125,8 @@ instance ToJSON WebsocketReply
         object [ "reply" .= ("login_failed" :: T.Text)
                , "reason" .= reason
                ]
+    toJSON WSPong =
+        object [ "reply" .= ("pong" :: T.Text) ]
 
 --broadcast :: Text -> ServerState -> IO ()
 --broadcast message clients = do
@@ -210,12 +220,21 @@ continueAuthenticated combinationChan sink chHandle account = forever $ do
     case combiMsg of
         MessageFromClient msg -> case msg of
             WSRequestStatus -> requestClientStatus chHandle account
-            _ -> return ()
+
+            _ -> let wsData = WS.textData . prepareWSReply $
+                                WSCommandNotAvailable "Command not available\
+                                                      \ after login."
+                 in WS.sendSink sink wsData
         MessageFromClientHub msg -> case msg of
             ForwardStatusToClient status ->
                 let wsData = WS.textData . prepareWSReply $ WSStatus status
                 in WS.sendSink sink wsData  -- TODO: check for exceptions
                                             -- (or maybe already handled by Snap?)
+            SendPongToClient ->
+                let wsData = WS.textData . prepareWSReply $ WSPong
+                in WS.sendSink sink wsData
+            CloseConnectionWithClient ->
+                WS.sendSink sink $ WS.close ("Timeout" :: T.Text)
 
 
 --            WSRequestStatus _ _ -> do   -- TODO: check hash

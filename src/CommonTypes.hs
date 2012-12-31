@@ -70,12 +70,16 @@ data BridgewalkerAction = DepositAction { baAmount :: Integer
                         deriving (Show, Generic)
 
 data ClientHubAnswer = ForwardStatusToClient ClientStatus
+                     | SendPongToClient
+                     | CloseConnectionWithClient
 
 data ClientHubCommand = RegisterClient { chcAccount :: BridgewalkerAccount
                                        , chcAnswerChan :: Chan ClientHubAnswer
                                        }
                       | RequestClientStatus { chcAccount ::
                                                     BridgewalkerAccount }
+                      | ReceivedPing { chcAccount :: BridgewalkerAccount }
+                      | CheckTimeouts
                       | SignalPossibleBitcoinEvents
                       | SignalAccountUpdates { chcAccounts ::
                                                     [BridgewalkerAccount] }

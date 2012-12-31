@@ -32,6 +32,9 @@ import LoggingUtils
 
 magicAddress = RPC.BitcoinAddress "1KmWJbRo4sjcQBFZN83KExVjBxTNxST6fL"
 
+timeoutInSeconds :: Int
+timeoutInSeconds = 5 --25
+
 data ClientData = ClientData { cdAccount :: BridgewalkerAccount
                              , cdLastKeepAlive :: UTCTime
                              , cdAnswerChan :: Chan ClientHubAnswer
@@ -58,6 +61,7 @@ initClientHub :: BridgewalkerHandles -> IO ClientHubHandle
 initClientHub bwHandles = do
     handle <- ClientHubHandle <$> newChan
     _ <- forkIO $ clientHubLoop handle bwHandles
+    _ <- forkIO $ periodicTimeoutCheck handle
     return handle
 
 clientHubLoop ::  ClientHubHandle -> BridgewalkerHandles -> IO ()
@@ -80,6 +84,15 @@ clientHubLoop (ClientHubHandle chChan) bwHandles = do
                     Just client -> do
                         sendClientStatus bwHandles accountCache client
                         go clientSet addressCache accountCache
+            ReceivedPing account -> do
+                case I.getOne (clientSet @= account) of
+                    Nothing -> go clientSet addressCache accountCache
+                    Just client -> do
+                        now <- getCurrentTime
+                        let client' = client { cdLastKeepAlive = now }
+                            clientSet' = I.updateIx account client' clientSet
+                        sendPong client
+                        go clientSet' addressCache accountCache
             SignalPossibleBitcoinEvents -> do
                 (accountCache', addressCache') <-
                     updatePendingInfos bwHandles addressCache
@@ -95,8 +108,23 @@ clientHubLoop (ClientHubHandle chChan) bwHandles = do
                         Just client ->
                             sendClientStatus bwHandles accountCache client
                 go clientSet addressCache accountCache
+            CheckTimeouts -> do
+                now <- getCurrentTime
+                let cutoff = addUTCTime (-1 * fromIntegral timeoutInSeconds) now
+                -- do a fast check first, before actually
+                -- touching the datastructure
+                let staleClients = clientSet @< cutoff
+                if I.null staleClients
+                    then go clientSet addressCache accountCache
+                    else do
+                        mapM_ closeConnection $ I.toList staleClients
+                        go (clientSet @>= cutoff) addressCache accountCache
 
--- TODO: remove stale clients from time to time
+periodicTimeoutCheck :: ClientHubHandle -> IO b
+periodicTimeoutCheck (ClientHubHandle chChan) =
+    forever $ do
+        threadDelay $ timeoutInSeconds * 1000 * 1000
+        writeChan chChan CheckTimeouts
 
 addClient :: I.IxSet ClientData-> BridgewalkerAccount-> Chan ClientHubAnswer-> IO (I.IxSet ClientData)
 addClient set account answerChan = do
@@ -114,6 +142,11 @@ registerClientWithHub (ClientHubHandle chChan) account = do
 requestClientStatus :: ClientHubHandle -> BridgewalkerAccount -> IO ()
 requestClientStatus (ClientHubHandle chChan) account = do
     writeChan chChan $ RequestClientStatus account
+    return ()
+
+receivedPing :: ClientHubHandle -> BridgewalkerAccount -> IO ()
+receivedPing (ClientHubHandle chChan) account = do
+    writeChan chChan $ ReceivedPing account
     return ()
 
 signalPossibleBitcoinEvents :: ClientHubHandle -> IO ()
@@ -142,6 +175,13 @@ sendClientStatus bwHandles accountCache client = do
                               , csPendingTxs = pendingTxs
                               }
     writeChan answerChan $ ForwardStatusToClient status
+
+sendPong :: ClientData -> IO ()
+sendPong client = writeChan (cdAnswerChan client) SendPongToClient
+
+closeConnection :: ClientData -> IO ()
+closeConnection client =
+    writeChan (cdAnswerChan client) CloseConnectionWithClient
 
 findAffectedClients :: [ClientData]-> AccountCache -> AccountCache -> [ClientData]
 findAffectedClients clients oldAccountCache newAccountCache =
