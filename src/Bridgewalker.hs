@@ -25,7 +25,7 @@ import LoggingUtils
 import PendingActionsTracker
 import Rebalancer
 
-import qualified PendingActionsTracker as PAT
+import qualified CommonTypes as CT
 
 myConnectInfo :: B.ByteString
 myConnectInfo = "dbname=bridgewalker"
@@ -134,6 +134,7 @@ actOnDeposits bwHandles =
         chHandle = bhClientHubHandle bwHandles
     in forever $ do
         (fetState, fEvents) <- waitForFilteredBitcoinEvents fbetHandle
+        mapM_ print fEvents
         let actions = concatMap convertToActions fEvents
         withTransaction dbConn $ do     -- atomic transaction: do not update
                                         -- fetState, before recording necessary
@@ -142,6 +143,7 @@ actOnDeposits bwHandles =
             let paState' = addPendingActions paState actions
             writeBitcoindStateToDB dbConn fetState
             writePendingActionsStateToDB dbConn paState'
+            print paState'
             _ <- swapMVar fetStateCopy fetState
             return ()
         unless (null actions) $ do
@@ -151,7 +153,7 @@ actOnDeposits bwHandles =
     convertToActions fTx@FilteredNewTransaction{} =
         let amount = adjustAmount . tAmount . fntTx $ fTx
             address = tAddress . fntTx $ fTx
-        in [DepositAction { baAmount = amount, PAT.baAddress = address }]
+        in [DepositAction { baAmount = amount, CT.baAddress = address }]
     convertToActions _ = []
 
 initBridgewalker :: IO BridgewalkerHandles

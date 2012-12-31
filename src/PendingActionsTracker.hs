@@ -1,9 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module PendingActionsTracker
-    ( PendingActionsState
-    , BridgewalkerAccount(..)
-    , BridgewalkerAction(..)
-    , initialPendingActionsState
+    ( initialPendingActionsState
     , initPendingActionsTracker
     , nudgePendingActionsTracker
     , addPendingActions
@@ -75,7 +72,9 @@ trackerLoop readState writeState bwHandles chan =
         _ <- readChan chan
         touchedAccounts <- withTransaction dbConn $ do
             paState <- readState dbConn
+            putStrLn $ "[PAT] >>>>>>>> Before processing: " ++ show paState
             (paState', keepGoing, touchedAccounts) <- maybeProcessOneAction bwHandles paState
+            putStrLn $ "[PAT] >>>>>>>> After processing: " ++ show paState'
             writeState dbConn paState'
             when keepGoing $ writeChan chan ()
             return touchedAccounts
@@ -117,13 +116,13 @@ processOneAction bwHandles action paState' = do
             -- put action back in the queue and also add
             -- a pause action
             let paState'' = putPendingAction paState' action
-            expiration <- addUTCTime pauseInterval <$> getCurrentTime
+            expiration <- addUTCTime pauseInterval <$> getCurrentTime                       -- IO: getCurrentTime
             let paState''' = putPendingAction paState'' $ PauseAction expiration
             return (paState''' { pasStatus = status }, False, touchedAccounts)
 
 checkPause :: UTCTime -> IO (PendingActionsStateModification, [BridgewalkerAccount])
 checkPause expiration = do
-    now <- getCurrentTime
+    now <- getCurrentTime                                                                   -- IO: getCurrentTime
     return $ if now >= expiration
                 then (RemoveAction, [])
                 else (KeepAction, [])
@@ -133,18 +132,19 @@ processDeposit bwHandles amount address = do
     let dbConn = bhDBConnPAT bwHandles
         logger = bhAppLogger bwHandles
         minimalOrderBTC = bcMtGoxMinimalOrderBTC . bhConfig $ bwHandles
-    accountM <- getAccountByAddress dbConn (adjustAddr address)
+    putStrLn "[PAT] in processDeposit function"
+    accountM <- getAccountByAddress dbConn (adjustAddr address)                             -- IO: Database
     case accountM of
         Nothing -> do
             let logMsg = SystemDepositProcessed
                             { lcInfo = "Deposit to system -\
                                        \ no matching account found." }
-            logger logMsg
+            logger logMsg                                                                   -- IO: Logger
             return (RemoveAction, [])
         Just (BridgewalkerAccount account) -> do
-            btcBalance <- getBTCInBalance dbConn account
+            btcBalance <- getBTCInBalance dbConn account                                    -- IO: Database
             let newBalance = btcBalance + amount
-            execute dbConn
+            execute dbConn                                                                  -- IO: Database
                         "update accounts set btc_in=? where account_nr=?"
                         (newBalance, account)
             let logMsg = DepositProcessed
@@ -155,9 +155,10 @@ processDeposit bwHandles amount address = do
                                         ++ " - balance is now "
                                         ++ show newBalance ++ " BTC."
                             }
-            logger logMsg
+            logger logMsg                                                                   -- IO: Logger
             let bwAccount = BridgewalkerAccount account
-            return $ if newBalance >= minimalOrderBTC
+            -- TODO: Remove temporary sell stop
+            return $ if False -- newBalance >= minimalOrderBTC
                         then let action = SellBTCAction
                                             { baAmount = newBalance
                                             , baAccount = bwAccount
@@ -172,32 +173,32 @@ sellBTC bwHandles amount bwAccount = do
         logger = bhAppLogger bwHandles
         dbConn = bhDBConnPAT bwHandles
         account = bAccount $ bwAccount
-    sell <- tryToExecuteSellOrder mtgoxHandles safetyMarginBTC amount
+    sell <- tryToExecuteSellOrder mtgoxHandles safetyMarginBTC amount                       -- IO: Mt.Gox
     case sell of
         Left (MtGoxCallError msg) -> do
             let logMsg = MtGoxError
                             { lcInfo = "Error communicating with Mt.Gox while\
                                        \ attempting to sell BTC. Error was: \
                                        \ " ++ msg }
-            logger logMsg
+            logger logMsg                                                                   -- IO: Logger
             return (AddPauseAction "Communication problems with Mt.Gox\
                                    \ - pausing until it is resolved.", [])
         Left MtGoxLowBalance -> do
             let logMsg = MtGoxLowBTCBalance
                         { lcInfo = "Postponing BTC sell order because of low\
                                    \ balance in Mt.Gox account." }
-            logger logMsg
+            logger logMsg                                                                   -- IO: Logger
             return (AddPauseAction "Pausing until rebalancing of\
                                    \ reserves is completed.", [])
         Right stats -> do
             let usdAmount = max 0 (usdEarned stats - usdFee stats)
-            btcBalance <- getBTCInBalance dbConn account
-            usdBalance <- getUSDBalance dbConn account
+            btcBalance <- getBTCInBalance dbConn account                                    -- IO: Database
+            usdBalance <- getUSDBalance dbConn account                                      -- IO: Database
             let newBTCBalance = max 0 (btcBalance - amount)
                 newUSDBalance = usdBalance + usdAmount
             execute dbConn "update accounts set btc_in=?, usd_balance=?\
                                 \ where account_nr=?"
-                                (newBTCBalance, newUSDBalance, account)
+                                (newBTCBalance, newUSDBalance, account)                     -- IO: Database
             let logMsg = BTCSold
                             { lcAccount = account
                             , lcInfo = show amount
@@ -207,7 +208,7 @@ sellBTC bwHandles amount bwAccount = do
                                         ++ show newUSDBalance ++ " USD and "
                                         ++ show newBTCBalance ++ " BTC."
                             }
-            logger logMsg
+            logger logMsg                                                                   -- IO: Logger
             return (RemoveAction, [BridgewalkerAccount account])
 
 buyBTC :: BridgewalkerHandles-> Integer-> RPC.BitcoinAddress-> BridgewalkerAccount-> IO (PendingActionsStateModification, [BridgewalkerAccount])
@@ -219,14 +220,14 @@ buyBTC bwHandles amount address bwAccount = do
         dbConn = bhDBConnPAT bwHandles
         account = bAccount $ bwAccount
     -- TODO: check for minimal BTC amount
-    usdAmountM <- simulateBTCBuy depthStoreHandle amount
+    usdAmountM <- simulateBTCBuy depthStoreHandle amount                                    -- IO: DepthStore
     case usdAmountM of
         Nothing -> do
             let logMsg = MtGoxError
                             { lcInfo = "Stale data from depth store while\
                                        \ trying to calculate USD value of\
                                        \ BTC buy order." }
-            logger logMsg
+            logger logMsg                                                                   -- IO: ...
             return (AddPauseAction "Communication problems with Mt.Gox\
                                    \ - pausing until it is resolved.", [])
         Just usdAmount -> do
