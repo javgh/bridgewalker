@@ -145,6 +145,11 @@ data LogContent = RebalancerFailure { lcInfo :: String }
                                }
                 | GuestAccountCreated { lcAccountName :: String }
                 | UserLoggedIn { lcAccount :: Integer }
+                | DisconnectedStaleClient
+                    { lcClientsDisconnected :: Integer
+                    , lcClientsRemaining :: Integer
+                    , lcInfo :: String
+                    }
                 | WatchdogError { lcInfo :: String }
                 | LogMisc { lcInfo :: String }
                 deriving (Generic, Show)

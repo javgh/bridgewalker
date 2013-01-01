@@ -119,7 +119,22 @@ clientHubLoop (ClientHubHandle chChan) bwHandles = do
                     then go clientSet addressCache accountCache
                     else do
                         mapM_ closeConnection $ I.toList staleClients
-                        go (clientSet @>= cutoff) addressCache accountCache
+                        let clientSet' = clientSet @>= cutoff
+                            staleCount = I.size staleClients
+                            connectedCount = I.size clientSet'
+                            logMsg =
+                                DisconnectedStaleClient
+                                    { lcClientsDisconnected =
+                                        fromIntegral staleCount
+                                    , lcClientsRemaining =
+                                        fromIntegral connectedCount
+                                    , lcInfo = "Disconnected "
+                                        ++ show staleCount ++ " stale\
+                                        \ client(s); " ++ show connectedCount
+                                        ++ " client(s) remaining online."
+                                    }
+                        logger logMsg
+                        go clientSet' addressCache accountCache
 
 periodicTimeoutCheck :: ClientHubHandle -> IO b
 periodicTimeoutCheck (ClientHubHandle chChan) =
