@@ -157,8 +157,7 @@ processDeposit bwHandles amount address = do
                             }
             logger logMsg                                                                   -- IO: Logger
             let bwAccount = BridgewalkerAccount account
-            -- TODO: Remove temporary sell stop
-            return $ if False -- newBalance >= minimalOrderBTC
+            return $ if newBalance >= minimalOrderBTC
                         then let action = SellBTCAction
                                             { baAmount = newBalance
                                             , baAccount = bwAccount

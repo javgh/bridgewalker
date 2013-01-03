@@ -146,9 +146,8 @@ actOnDeposits bwHandles =
             print paState'
             _ <- swapMVar fetStateCopy fetState
             return ()
-        unless (null actions) $ do
-            nudgePendingActionsTracker patHandle
-            signalPossibleBitcoinEvents chHandle
+        unless (null actions) $ nudgePendingActionsTracker patHandle
+        signalPossibleBitcoinEvents chHandle
   where
     convertToActions fTx@FilteredNewTransaction{} =
         let amount = adjustAmount . tAmount . fntTx $ fTx
