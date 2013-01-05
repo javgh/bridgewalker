@@ -59,6 +59,7 @@ data WebsocketCommand = WSSendBTC { wcSessionID :: T.Text
                                 , wcAccountPassword :: T.Text
                                 }
                       | WSRequestStatus
+                      | WSRequestQuote { wcQuoteType :: QuoteType }
                       | WSPing
                       deriving (Show)
 
@@ -72,6 +73,8 @@ data WebsocketReply = WSStatus { wrStatus :: ClientStatus }
                                             }
                     | WSLoginSuccessful
                     | WSLoginFailed { wrReason :: T.Text }
+                    | WSQuoteUnavailable
+                    | WSQuote { wrQuote :: QuoteData }
                     | WSPong
                     deriving (Show)
 
@@ -82,6 +85,17 @@ instance FromJSON WebsocketCommand
   where
     parseJSON (Object o) = case H.lookup "op" o of
         Just "request_status" -> return WSRequestStatus
+        Just "request_quote" -> do
+            t <- o .: "type" :: Parser T.Text
+            a <- o .: "amount"
+            case t of
+                "quote_based_on_btc" ->
+                    return $ WSRequestQuote (QuoteBasedOnBTC a)
+                "quote_based_on_usd_before_fees" ->
+                    return $ WSRequestQuote (QuoteBasedOnUSDBeforeFees a)
+                "quote_based_on_usd_after_fees" ->
+                    return $ WSRequestQuote (QuoteBasedOnUSDAfterFees a)
+                _ -> mzero
         Just "send_btc" -> WSSendBTC <$> o .: "session_id"
                                      <*> o .: "bitcoin_address"
                                      <*> o .: "amount"
@@ -124,6 +138,15 @@ instance ToJSON WebsocketReply
     toJSON (WSLoginFailed reason) =
         object [ "reply" .= ("login_failed" :: T.Text)
                , "reason" .= reason
+               ]
+    toJSON WSQuoteUnavailable =
+        object [ "reply" .= ("quote_unavailable" :: T.Text) ]
+    toJSON (WSQuote quoteData) =
+        object [ "reply" .= ("quote" :: T.Text)
+               , "btc" .= qdBTC quoteData
+               , "usd_recipient" .= qdUSDRecipient quoteData
+               , "usd_account" .= qdUSDAccount quoteData
+               , "sufficient_balance" .= qdSufficientBalance quoteData
                ]
     toJSON WSPong =
         object [ "reply" .= ("pong" :: T.Text) ]
@@ -221,6 +244,9 @@ continueAuthenticated combinationChan sink chHandle account = forever $ do
         MessageFromClient msg -> case msg of
             WSRequestStatus -> requestClientStatus chHandle account
             WSPing -> receivedPing chHandle account
+            WSRequestQuote _ ->
+                let wsData = WS.textData . prepareWSReply $ WSQuoteUnavailable
+                in WS.sendSink sink wsData
             _ -> let wsData = WS.textData . prepareWSReply $
                                 WSCommandNotAvailable "Command not available\
                                                       \ after login."

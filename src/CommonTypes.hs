@@ -17,6 +17,8 @@ module CommonTypes
     , LoggingCmd(..)
     , LogContent(..)
     , LogEntry(..)
+    , QuoteData(..)
+    , QuoteType(..)
     , confsNeededForSending
     , SnapApp(..)
     , SnapAppHandler
@@ -92,6 +94,18 @@ data ClientStatus = ClientStatus { csUSDBalance :: Integer
                                  , csPendingTxs :: [ClientPendingTransaction]
                                  }
                     deriving (Show)
+
+data QuoteType = QuoteBasedOnBTC Integer
+               | QuoteBasedOnUSDBeforeFees Integer
+               | QuoteBasedOnUSDAfterFees Integer
+               deriving (Show)
+
+data QuoteData = QuoteData { qdBTC :: Integer
+                           , qdUSDRecipient :: Integer
+                           , qdUSDAccount :: Integer
+                           , qdSufficientBalance :: Bool
+                           }
+                 deriving (Show)
 
 data ClientPendingTransaction = ClientPendingTransaction
                                     { cptAmount :: Integer
