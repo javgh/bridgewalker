@@ -58,6 +58,11 @@ initBridgewalkerHandles connectInfo = do
     mtgoxHandles <- initMtGoxAPI (Just watchdogLogger)
                                     (bcMtGoxCredentials bwConfig)
                                     streamSettings
+    mtgoxFee <- do
+        privateInfoM <- callHTTPApi mtgoxHandles getPrivateInfoR
+        case privateInfoM of
+            Nothing -> error "Unable to determine current Mt.Gox fee"
+            Just privateInfo -> return $ piFee privateInfo
     fetStateCopy <- newMVar fetState
     fbetHandle <- initFilteredBitcoinEventTask (Just watchdogLogger)
                     (bcRPCAuth bwConfig) (bcNotifyFile bwConfig)
@@ -75,6 +80,7 @@ initBridgewalkerHandles connectInfo = do
                                 , bhDBConnCH = dbConn2
                                 , bhDBConnFBET = dbConn3
                                 , bhMtGoxHandles = mtgoxHandles
+                                , bhMtGoxFee = mtgoxFee
                                 , bhFilteredBitcoinEventTaskHandle = fbetHandle
                                 , bhFilteredEventStateCopy = fetStateCopy
                                 , bhRebalancerHandle = rbHandle

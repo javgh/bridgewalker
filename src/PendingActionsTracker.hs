@@ -219,9 +219,10 @@ buyBTC bwHandles amount address bwAccount = do
         dbConn = bhDBConnPAT bwHandles
         account = bAccount $ bwAccount
     -- TODO: check for minimal BTC amount
+    -- TODO: check for sane amount
     usdAmountM <- simulateBTCBuy depthStoreHandle amount                                    -- IO: DepthStore
     case usdAmountM of
-        Nothing -> do
+        DepthStoreUnavailable -> do
             let logMsg = MtGoxError
                             { lcInfo = "Stale data from depth store while\
                                        \ trying to calculate USD value of\
@@ -229,7 +230,8 @@ buyBTC bwHandles amount address bwAccount = do
             logger logMsg                                                                   -- IO: ...
             return (AddPauseAction "Communication problems with Mt.Gox\
                                    \ - pausing until it is resolved.", [])
-        Just usdAmount -> do
+        NotEnoughDepth -> return (RemoveAction, []) -- TODO: maybe log something
+        DepthStoreAnswer usdAmount -> do
             usdBalance <- getUSDBalance dbConn account
             -- TODO: take fees into account
             if usdAmount > usdBalance

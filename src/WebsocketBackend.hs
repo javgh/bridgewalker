@@ -59,7 +59,9 @@ data WebsocketCommand = WSSendBTC { wcSessionID :: T.Text
                                 , wcAccountPassword :: T.Text
                                 }
                       | WSRequestStatus
-                      | WSRequestQuote { wcQuoteType :: QuoteType }
+                      | WSRequestQuote { wcRequestID :: Integer
+                                       , wcQuoteType :: QuoteType
+                                       }
                       | WSPing
                       deriving (Show)
 
@@ -73,8 +75,10 @@ data WebsocketReply = WSStatus { wrStatus :: ClientStatus }
                                             }
                     | WSLoginSuccessful
                     | WSLoginFailed { wrReason :: T.Text }
-                    | WSQuoteUnavailable
-                    | WSQuote { wrQuote :: QuoteData }
+                    | WSQuoteUnavailable { wrRequestID :: Integer }
+                    | WSQuote { wrRequestID :: Integer
+                              , wrQuote :: QuoteData
+                              }
                     | WSPong
                     deriving (Show)
 
@@ -87,14 +91,15 @@ instance FromJSON WebsocketCommand
         Just "request_status" -> return WSRequestStatus
         Just "request_quote" -> do
             t <- o .: "type" :: Parser T.Text
+            i <- o .: "request_id"
             a <- o .: "amount"
             case t of
                 "quote_based_on_btc" ->
-                    return $ WSRequestQuote (QuoteBasedOnBTC a)
+                    return $ WSRequestQuote i (QuoteBasedOnBTC a)
                 "quote_based_on_usd_before_fees" ->
-                    return $ WSRequestQuote (QuoteBasedOnUSDBeforeFees a)
+                    return $ WSRequestQuote i (QuoteBasedOnUSDBeforeFees a)
                 "quote_based_on_usd_after_fees" ->
-                    return $ WSRequestQuote (QuoteBasedOnUSDAfterFees a)
+                    return $ WSRequestQuote i (QuoteBasedOnUSDAfterFees a)
                 _ -> mzero
         Just "send_btc" -> WSSendBTC <$> o .: "session_id"
                                      <*> o .: "bitcoin_address"
@@ -139,10 +144,13 @@ instance ToJSON WebsocketReply
         object [ "reply" .= ("login_failed" :: T.Text)
                , "reason" .= reason
                ]
-    toJSON WSQuoteUnavailable =
-        object [ "reply" .= ("quote_unavailable" :: T.Text) ]
-    toJSON (WSQuote quoteData) =
+    toJSON (WSQuoteUnavailable requestID) =
+        object [ "reply" .= ("quote_unavailable" :: T.Text)
+               , "request_id" .= requestID
+               ]
+    toJSON (WSQuote requestID quoteData) =
         object [ "reply" .= ("quote" :: T.Text)
+               , "request_id" .= requestID
                , "btc" .= qdBTC quoteData
                , "usd_recipient" .= qdUSDRecipient quoteData
                , "usd_account" .= qdUSDAccount quoteData
@@ -244,9 +252,8 @@ continueAuthenticated combinationChan sink chHandle account = forever $ do
         MessageFromClient msg -> case msg of
             WSRequestStatus -> requestClientStatus chHandle account
             WSPing -> receivedPing chHandle account
-            WSRequestQuote _ ->
-                let wsData = WS.textData . prepareWSReply $ WSQuoteUnavailable
-                in WS.sendSink sink wsData
+            WSRequestQuote reqID quoteType ->
+                requestQuote chHandle account reqID quoteType
             _ -> let wsData = WS.textData . prepareWSReply $
                                 WSCommandNotAvailable "Command not available\
                                                       \ after login."
@@ -256,6 +263,14 @@ continueAuthenticated combinationChan sink chHandle account = forever $ do
                 let wsData = WS.textData . prepareWSReply $ WSStatus status
                 in WS.sendSink sink wsData  -- TODO: check for exceptions
                                             -- (or maybe already handled by Snap?)
+            ForwardQuoteToClient reqID Nothing ->
+                let wsData = WS.textData . prepareWSReply $
+                                                WSQuoteUnavailable reqID
+                in WS.sendSink sink wsData
+            ForwardQuoteToClient reqID (Just replyData) ->
+                let wsData = WS.textData . prepareWSReply $
+                                                WSQuote reqID replyData
+                in WS.sendSink sink wsData
             SendPongToClient ->
                 let wsData = WS.textData . prepareWSReply $ WSPong
                 in WS.sendSink sink wsData

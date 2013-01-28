@@ -30,6 +30,7 @@ data BridgewalkerConfig = BridgewalkerConfig
                             , bcSafetyMarginBTC :: !Integer
                             , bcSafetyMarginUSD :: !Integer
                             , bcMtGoxMinimalOrderBTC :: !Integer
+                            , bcTargetExchangeFee :: !Double
                             , bcNotifyFile :: !FilePath
                             , bcMarkerAddresses
                                 :: ![(BitcoinAddress, BitcoinAmount)]
@@ -44,6 +45,7 @@ data BridgewalkerHandles = BridgewalkerHandles
                             , bhDBConnCH :: Connection
                             , bhDBConnFBET :: Connection
                             , bhMtGoxHandles :: MtGoxAPIHandles
+                            , bhMtGoxFee :: Double
                             , bhFilteredBitcoinEventTaskHandle
                                 :: FilteredBitcoinEventTaskHandle
                             , bhFilteredEventStateCopy
@@ -71,6 +73,7 @@ readConfig = do
             safetyMarginBTCF <- get cp "DEFAULT" "safety_margin_btc"
             safetyMarginUSDF <- get cp "DEFAULT" "safety_margin_usd"
             mtgoxMinimalOrderBTCF <- get cp "DEFAULT" "mtgox_minimal_order_btc"
+            targetExchangeFee <- get cp "DEFAULT" "target_exchange_fee"
             notifyFile <- get cp "DEFAULT" "bitcoind_notify_file"
             markerAddresses <- get cp "DEFAULT" "marker_addresses"
             let authKey = B8.pack $
@@ -91,6 +94,7 @@ readConfig = do
                         , bcSafetyMarginBTC = safetyMarginBTC
                         , bcSafetyMarginUSD = safetyMarginUSD
                         , bcMtGoxMinimalOrderBTC = mtgoxMinimalOrderBTC
+                        , bcTargetExchangeFee = targetExchangeFee
                         , bcNotifyFile = notifyFile
                         , bcMarkerAddresses =
                             adjustMarkerAddresses (read markerAddresses)

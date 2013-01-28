@@ -4,6 +4,7 @@ module ClientHub
     , ClientHubHandle
     , registerClientWithHub
     , requestClientStatus
+    , requestQuote
     , signalPossibleBitcoinEvents
     , signalAccountUpdates
     , receivedPing
@@ -18,6 +19,7 @@ import Data.Foldable(foldl',foldlM)
 import Data.IxSet((@<), (@>=), (@=))
 import Data.Time.Clock
 import Data.Typeable
+import Network.MtGoxAPI
 
 import qualified Data.IxSet as I
 import qualified Data.Map as M
@@ -84,6 +86,12 @@ clientHubLoop (ClientHubHandle chChan) bwHandles = do
                     Nothing -> go clientSet addressCache accountCache
                     Just client -> do
                         sendClientStatus bwHandles accountCache client
+                        go clientSet addressCache accountCache
+            RequestQuote account requestID quoteType -> do
+                case I.getOne (clientSet @= account) of
+                    Nothing -> go clientSet addressCache accountCache
+                    Just client -> do
+                        sendQuote bwHandles client account requestID quoteType
                         go clientSet addressCache accountCache
             ReceivedPing account -> do
                 case I.getOne (clientSet @= account) of
@@ -160,6 +168,11 @@ requestClientStatus (ClientHubHandle chChan) account = do
     writeChan chChan $ RequestClientStatus account
     return ()
 
+requestQuote :: ClientHubHandle -> BridgewalkerAccount -> Integer -> QuoteType -> IO ()
+requestQuote (ClientHubHandle chChan) account requestID quoteType = do
+    writeChan chChan $ RequestQuote account requestID quoteType
+    return ()
+
 receivedPing :: ClientHubHandle -> BridgewalkerAccount -> IO ()
 receivedPing (ClientHubHandle chChan) account = do
     writeChan chChan $ ReceivedPing account
@@ -191,6 +204,89 @@ sendClientStatus bwHandles accountCache client = do
                               , csPendingTxs = pendingTxs
                               }
     writeChan answerChan $ ForwardStatusToClient status
+
+sendQuote :: BridgewalkerHandles-> ClientData-> BridgewalkerAccount-> Integer-> QuoteType-> IO ()
+sendQuote bwHandles client account requestID quoteType = do
+    let mtgoxHandles = bhMtGoxHandles bwHandles
+        depthStoreHandle = mtgoxDepthStoreHandle mtgoxHandles
+        dbConn = bhDBConnCH bwHandles
+        mtgoxFee = bhMtGoxFee bwHandles
+        targetFee = bcTargetExchangeFee . bhConfig $ bwHandles
+        actualFee = max mtgoxFee targetFee
+        answerChan = cdAnswerChan client
+    usdBalance <- getUSDBalance dbConn (bAccount account)
+    replyData <-
+        case quoteType of
+            QuoteBasedOnBTC btc -> do
+                usdAmountBuyM <- simulateBTCBuy depthStoreHandle btc
+                usdAmountSellM <- simulateBTCSell depthStoreHandle btc
+                return $
+                    case unifyDepthStoreAnswers usdAmountBuyM usdAmountSellM of
+                        Nothing -> Nothing
+                        Just (usdAmountBuy, usdAmountSell) ->
+                            let usdAmountBuyWithFee =
+                                    addFee usdAmountBuy actualFee
+                            in Just $ QuoteData { qdBTC = btc
+                                                , qdUSDRecipient = usdAmountSell
+                                                , qdUSDAccount =
+                                                   usdAmountBuyWithFee
+                                                , qdSufficientBalance =
+                                                   usdAmountBuyWithFee
+                                                       <= usdBalance
+                                                }
+            QuoteBasedOnUSDBeforeFees usd -> do
+                btcAmountM <- simulateUSDBuy depthStoreHandle usd
+                case btcAmountM of
+                   DepthStoreAnswer btcAmount -> do
+                       usdAmountNeededM <-
+                           simulateBTCBuy depthStoreHandle btcAmount
+                       return $ case usdAmountNeededM of
+                                    DepthStoreAnswer usdAmountNeeded ->
+                                        let usdAmountWithFee =
+                                                addFee usdAmountNeeded actualFee
+                                        in Just $
+                                            QuoteData { qdBTC = btcAmount
+                                                      , qdUSDRecipient = usd
+                                                      , qdUSDAccount =
+                                                         usdAmountWithFee
+                                                      , qdSufficientBalance =
+                                                         usdAmountWithFee
+                                                             <= usdBalance
+                                                      }
+                                    _ -> Nothing
+                   _ -> return Nothing
+            QuoteBasedOnUSDAfterFees usd -> do
+                let usdBeforeFee = subtractFee usd actualFee
+                btcAmountM <- simulateUSDSell depthStoreHandle usdBeforeFee
+                case btcAmountM of
+                   DepthStoreAnswer btcAmount -> do
+                       usdAmountRecipientM <-
+                           simulateBTCSell depthStoreHandle btcAmount
+                       return $ case usdAmountRecipientM of
+                                    DepthStoreAnswer usdAmountRecipient ->
+                                        Just $ QuoteData { qdBTC = btcAmount
+                                                         , qdUSDRecipient =
+                                                            usdAmountRecipient
+                                                         , qdUSDAccount = usd
+                                                         , qdSufficientBalance =
+                                                            usd <= usdBalance
+                                                         }
+                                    _ -> Nothing
+                   _ -> return Nothing
+    writeChan answerChan $ ForwardQuoteToClient requestID replyData
+
+addFee :: Integer -> Double -> Integer
+addFee amount fee =
+    let markup = round $ fromIntegral amount * (fee / 100)
+    in amount + markup
+
+subtractFee :: Integer -> Double -> Integer
+subtractFee amount fee =
+    round $ fromIntegral amount * (100.0 / (100.0 + fee))
+
+unifyDepthStoreAnswers :: DepthStoreAnswer -> DepthStoreAnswer -> Maybe (Integer, Integer)
+unifyDepthStoreAnswers (DepthStoreAnswer a) (DepthStoreAnswer b) = Just (a, b)
+unifyDepthStoreAnswers _ _ = Nothing
 
 sendPong :: ClientData -> IO ()
 sendPong client = writeChan (cdAnswerChan client) SendPongToClient
