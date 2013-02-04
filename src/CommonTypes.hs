@@ -18,7 +18,7 @@ module CommonTypes
     , LogContent(..)
     , LogEntry(..)
     , QuoteData(..)
-    , QuoteType(..)
+    , AmountType(..)
     , confsNeededForSending
     , SnapApp(..)
     , SnapAppHandler
@@ -83,7 +83,7 @@ data ClientHubCommand = RegisterClient { chcAccount :: BridgewalkerAccount
                                                     BridgewalkerAccount }
                       | RequestQuote { chcAccount :: BridgewalkerAccount
                                      , chcRequestID :: Integer
-                                     , chcQuoteType :: QuoteType
+                                     , chcAmountType :: AmountType
                                      }
                       | ReceivedPing { chcAccount :: BridgewalkerAccount }
                       | CheckTimeouts
@@ -100,10 +100,10 @@ data ClientStatus = ClientStatus { csUSDBalance :: Integer
                                  }
                     deriving (Show)
 
-data QuoteType = QuoteBasedOnBTC Integer
-               | QuoteBasedOnUSDBeforeFees Integer
-               | QuoteBasedOnUSDAfterFees Integer
-               deriving (Show)
+data AmountType = AmountBasedOnBTC Integer
+                | AmountBasedOnUSDBeforeFees Integer
+                | AmountBasedOnUSDAfterFees Integer
+                deriving (Show)
 
 data QuoteData = QuoteData { qdBTC :: Integer
                            , qdUSDRecipient :: Integer

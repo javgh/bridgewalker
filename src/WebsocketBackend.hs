@@ -49,19 +49,19 @@ guestPwLength = 25
 passwordStoreStrength :: Int
 passwordStoreStrength = 15
 
-data WebsocketCommand = WSSendBTC { wcSessionID :: T.Text
-                                  , wcBitcoinAddress :: T.Text
-                                  , wcAmount :: Integer
-                                  }
-                      | WSRequestVersion { wcClientVersion :: T.Text }
+data WebsocketCommand = WSRequestVersion { wcClientVersion :: T.Text }
                       | WSCreateGuestAccount
                       | WSLogin { wcAccountName :: T.Text
                                 , wcAccountPassword :: T.Text
                                 }
                       | WSRequestStatus
                       | WSRequestQuote { wcRequestID :: Integer
-                                       , wcQuoteType :: QuoteType
+                                       , wcAmountType :: AmountType
                                        }
+                      | WSSendPayment { wcRequestID :: Integer
+                                      , wcAddress :: T.Text
+                                      , wcAmountType :: AmountType
+                                      }
                       | WSPing
                       deriving (Show)
 
@@ -79,6 +79,10 @@ data WebsocketReply = WSStatus { wrStatus :: ClientStatus }
                     | WSQuote { wrRequestID :: Integer
                               , wrQuote :: QuoteData
                               }
+                    | WSSendFailed { wrRequestID :: Integer
+                                   , wrReason :: T.Text
+                                   }
+                    | WSSendSuccessful { wrRequestID :: Integer }
                     | WSPong
                     deriving (Show)
 
@@ -90,20 +94,30 @@ instance FromJSON WebsocketCommand
     parseJSON (Object o) = case H.lookup "op" o of
         Just "request_status" -> return WSRequestStatus
         Just "request_quote" -> do
-            t <- o .: "type" :: Parser T.Text
             i <- o .: "request_id"
+            t <- o .: "type" :: Parser T.Text
             a <- o .: "amount"
             case t of
-                "quote_based_on_btc" ->
-                    return $ WSRequestQuote i (QuoteBasedOnBTC a)
-                "quote_based_on_usd_before_fees" ->
-                    return $ WSRequestQuote i (QuoteBasedOnUSDBeforeFees a)
-                "quote_based_on_usd_after_fees" ->
-                    return $ WSRequestQuote i (QuoteBasedOnUSDAfterFees a)
+                "amount_based_on_btc" ->
+                    return $ WSRequestQuote i (AmountBasedOnBTC a)
+                "amount_based_on_usd_before_fees" ->
+                    return $ WSRequestQuote i (AmountBasedOnUSDBeforeFees a)
+                "amount_based_on_usd_after_fees" ->
+                    return $ WSRequestQuote i (AmountBasedOnUSDAfterFees a)
                 _ -> mzero
-        Just "send_btc" -> WSSendBTC <$> o .: "session_id"
-                                     <*> o .: "bitcoin_address"
-                                     <*> o .: "amount"
+        Just "send_payment" -> do
+            i <- o .: "request_id"
+            addr <- o .: "address" :: Parser T.Text
+            t <- o .: "type" :: Parser T.Text
+            amount <- o .: "amount"
+            case t of
+                "amount_based_on_btc" ->
+                    return $ WSSendPayment i addr (AmountBasedOnBTC amount)
+                "amount_based_on_usd_before_fees" ->
+                    return $ WSSendPayment i addr (AmountBasedOnUSDBeforeFees amount)
+                "amount_based_on_usd_after_fees" ->
+                    return $ WSSendPayment i addr (AmountBasedOnUSDAfterFees amount)
+                _ -> mzero
         Just "request_version" -> WSRequestVersion <$> o .: "client_version"
         Just "create_guest_account" -> return WSCreateGuestAccount
         Just "login" -> WSLogin <$> o .: "account_name"
@@ -155,6 +169,15 @@ instance ToJSON WebsocketReply
                , "usd_recipient" .= qdUSDRecipient quoteData
                , "usd_account" .= qdUSDAccount quoteData
                , "sufficient_balance" .= qdSufficientBalance quoteData
+               ]
+    toJSON (WSSendFailed requestID reason) =
+        object [ "reply" .= ("send_failed" :: T.Text)
+               , "request_id" .= requestID
+               , "reason" .= reason
+               ]
+    toJSON (WSSendSuccessful requestID) =
+        object [ "reply" .= ("send_successful" :: T.Text)
+               , "request_id" .= requestID
                ]
     toJSON WSPong =
         object [ "reply" .= ("pong" :: T.Text) ]
@@ -252,8 +275,13 @@ continueAuthenticated combinationChan sink chHandle account = forever $ do
         MessageFromClient msg -> case msg of
             WSRequestStatus -> requestClientStatus chHandle account
             WSPing -> receivedPing chHandle account
-            WSRequestQuote reqID quoteType ->
-                requestQuote chHandle account reqID quoteType
+            WSRequestQuote reqID amountType ->
+                requestQuote chHandle account reqID amountType
+            rq@WSSendPayment {} ->
+                let wsData = WS.textData . prepareWSReply $
+                                WSSendFailed (wcRequestID rq)
+                                    "Not yet implemented."
+                in WS.sendSink sink wsData
             _ -> let wsData = WS.textData . prepareWSReply $
                                 WSCommandNotAvailable "Command not available\
                                                       \ after login."

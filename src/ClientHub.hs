@@ -87,11 +87,11 @@ clientHubLoop (ClientHubHandle chChan) bwHandles = do
                     Just client -> do
                         sendClientStatus bwHandles accountCache client
                         go clientSet addressCache accountCache
-            RequestQuote account requestID quoteType -> do
+            RequestQuote account requestID amountType -> do
                 case I.getOne (clientSet @= account) of
                     Nothing -> go clientSet addressCache accountCache
                     Just client -> do
-                        sendQuote bwHandles client account requestID quoteType
+                        sendQuote bwHandles client account requestID amountType
                         go clientSet addressCache accountCache
             ReceivedPing account -> do
                 case I.getOne (clientSet @= account) of
@@ -168,9 +168,9 @@ requestClientStatus (ClientHubHandle chChan) account = do
     writeChan chChan $ RequestClientStatus account
     return ()
 
-requestQuote :: ClientHubHandle -> BridgewalkerAccount -> Integer -> QuoteType -> IO ()
-requestQuote (ClientHubHandle chChan) account requestID quoteType = do
-    writeChan chChan $ RequestQuote account requestID quoteType
+requestQuote :: ClientHubHandle -> BridgewalkerAccount -> Integer -> AmountType -> IO ()
+requestQuote (ClientHubHandle chChan) account requestID amountType = do
+    writeChan chChan $ RequestQuote account requestID amountType
     return ()
 
 receivedPing :: ClientHubHandle -> BridgewalkerAccount -> IO ()
@@ -205,8 +205,8 @@ sendClientStatus bwHandles accountCache client = do
                               }
     writeChan answerChan $ ForwardStatusToClient status
 
-sendQuote :: BridgewalkerHandles-> ClientData-> BridgewalkerAccount-> Integer-> QuoteType-> IO ()
-sendQuote bwHandles client account requestID quoteType = do
+sendQuote :: BridgewalkerHandles-> ClientData-> BridgewalkerAccount-> Integer-> AmountType-> IO ()
+sendQuote bwHandles client account requestID amountType = do
     let mtgoxHandles = bhMtGoxHandles bwHandles
         depthStoreHandle = mtgoxDepthStoreHandle mtgoxHandles
         dbConn = bhDBConnCH bwHandles
@@ -216,8 +216,8 @@ sendQuote bwHandles client account requestID quoteType = do
         answerChan = cdAnswerChan client
     usdBalance <- getUSDBalance dbConn (bAccount account)
     replyData <-
-        case quoteType of
-            QuoteBasedOnBTC btc -> do
+        case amountType of
+            AmountBasedOnBTC btc -> do
                 usdAmountBuyM <- simulateBTCBuy depthStoreHandle btc
                 usdAmountSellM <- simulateBTCSell depthStoreHandle btc
                 return $
@@ -234,7 +234,7 @@ sendQuote bwHandles client account requestID quoteType = do
                                                    usdAmountBuyWithFee
                                                        <= usdBalance
                                                 }
-            QuoteBasedOnUSDBeforeFees usd -> do
+            AmountBasedOnUSDBeforeFees usd -> do
                 btcAmountM <- simulateUSDBuy depthStoreHandle usd
                 case btcAmountM of
                    DepthStoreAnswer btcAmount -> do
@@ -255,7 +255,7 @@ sendQuote bwHandles client account requestID quoteType = do
                                                       }
                                     _ -> Nothing
                    _ -> return Nothing
-            QuoteBasedOnUSDAfterFees usd -> do
+            AmountBasedOnUSDAfterFees usd -> do
                 let usdBeforeFee = subtractFee usd actualFee
                 btcAmountM <- simulateUSDSell depthStoreHandle usdBeforeFee
                 case btcAmountM of
