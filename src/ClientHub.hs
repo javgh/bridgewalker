@@ -5,8 +5,10 @@ module ClientHub
     , registerClientWithHub
     , requestClientStatus
     , requestQuote
+    , sendPayment
     , signalPossibleBitcoinEvents
     , signalAccountUpdates
+    , signalFailedSend
     , receivedPing
     ) where
 
@@ -32,11 +34,17 @@ import CommonTypes
 import Config
 import DbUtils
 import LoggingUtils
+import PendingActionsTrackerQueueManagement
+import QuoteUtils
 
 magicAddress = RPC.BitcoinAddress "1KmWJbRo4sjcQBFZN83KExVjBxTNxST6fL"
 
 timeoutInSeconds :: Int
 timeoutInSeconds = 30
+
+sendPaymentInterval :: NominalDiffTime
+sendPaymentInterval = 10    -- SendPayment commands have to be executed
+                            -- within 10 seconds or not at all
 
 data ClientData = ClientData { cdAccount :: BridgewalkerAccount
                              , cdLastKeepAlive :: UTCTime
@@ -83,16 +91,19 @@ clientHubLoop (ClientHubHandle chChan) bwHandles = do
                 go clientSet' addressCache accountCache
             RequestClientStatus account -> do
                 case I.getOne (clientSet @= account) of
-                    Nothing -> go clientSet addressCache accountCache
-                    Just client -> do
+                    Nothing -> return ()
+                    Just client ->
                         sendClientStatus bwHandles accountCache client
-                        go clientSet addressCache accountCache
+                go clientSet addressCache accountCache
             RequestQuote account requestID amountType -> do
                 case I.getOne (clientSet @= account) of
-                    Nothing -> go clientSet addressCache accountCache
-                    Just client -> do
+                    Nothing -> return ()
+                    Just client ->
                         sendQuote bwHandles client account requestID amountType
-                        go clientSet addressCache accountCache
+                go clientSet addressCache accountCache
+            SendPayment account requestID address amountType -> do
+                sendPaymentToPAT bwHandles account requestID address amountType
+                go clientSet addressCache accountCache
             ReceivedPing account -> do
                 case I.getOne (clientSet @= account) of
                     Nothing -> go clientSet addressCache accountCache
@@ -116,6 +127,11 @@ clientHubLoop (ClientHubHandle chChan) bwHandles = do
                         Nothing -> return ()
                         Just client ->
                             sendClientStatus bwHandles accountCache client
+                go clientSet addressCache accountCache
+            SignalFailedSend account requestID reason -> do
+                case I.getOne (clientSet @= account) of
+                    Nothing -> return ()
+                    Just client -> sendFailedSend client requestID reason
                 go clientSet addressCache accountCache
             CheckTimeouts -> do
                 now <- getCurrentTime
@@ -173,6 +189,10 @@ requestQuote (ClientHubHandle chChan) account requestID amountType = do
     writeChan chChan $ RequestQuote account requestID amountType
     return ()
 
+sendPayment :: ClientHubHandle -> BridgewalkerAccount -> Integer -> T.Text -> AmountType -> IO ()
+sendPayment (ClientHubHandle chChan) account requestID address amountType = do
+    writeChan chChan $ SendPayment account requestID address amountType
+
 receivedPing :: ClientHubHandle -> BridgewalkerAccount -> IO ()
 receivedPing (ClientHubHandle chChan) account = do
     writeChan chChan $ ReceivedPing account
@@ -187,6 +207,24 @@ signalAccountUpdates :: ClientHubHandle -> [BridgewalkerAccount] -> IO ()
 signalAccountUpdates (ClientHubHandle chChan) accounts = do
     writeChan chChan $ SignalAccountUpdates accounts
     return ()
+
+--signalSuccessfulSend (ClientHubHandle chChan) account requestID = do
+--    writeChan chChan $ SignalSuccessfulSend account requestID
+--    return ()
+
+signalFailedSend (ClientHubHandle chChan) account requestID reason = do
+    writeChan chChan $ SignalFailedSend account requestID reason
+    return ()
+
+sendPaymentToPAT bwHandles account requestID address amountType = do
+    let dbConn = bhDBConnCH bwHandles
+        patHandleMVar = bhPendingActionsTrackerHandleMVar bwHandles
+    patHandle <- readMVar patHandleMVar
+    expiration <- addUTCTime sendPaymentInterval <$> getCurrentTime
+    let action = SendPaymentAction account requestID
+                            (adjustAddr address) amountType expiration
+    addPendingActions dbConn [action]
+    nudgePendingActionsTracker patHandle
 
 sendClientStatus :: BridgewalkerHandles-> AccountCache-> ClientData-> IO ()
 sendClientStatus bwHandles accountCache client = do
@@ -207,89 +245,19 @@ sendClientStatus bwHandles accountCache client = do
 
 sendQuote :: BridgewalkerHandles-> ClientData-> BridgewalkerAccount-> Integer-> AmountType-> IO ()
 sendQuote bwHandles client account requestID amountType = do
-    let mtgoxHandles = bhMtGoxHandles bwHandles
-        depthStoreHandle = mtgoxDepthStoreHandle mtgoxHandles
-        dbConn = bhDBConnCH bwHandles
-        mtgoxFee = bhMtGoxFee bwHandles
-        targetFee = bcTargetExchangeFee . bhConfig $ bwHandles
-        actualFee = max mtgoxFee targetFee
-        answerChan = cdAnswerChan client
-    usdBalance <- getUSDBalance dbConn (bAccount account)
-    replyData <-
-        case amountType of
-            AmountBasedOnBTC btc -> do
-                usdAmountBuyM <- simulateBTCBuy depthStoreHandle btc
-                usdAmountSellM <- simulateBTCSell depthStoreHandle btc
-                return $
-                    case unifyDepthStoreAnswers usdAmountBuyM usdAmountSellM of
-                        Nothing -> Nothing
-                        Just (usdAmountBuy, usdAmountSell) ->
-                            let usdAmountBuyWithFee =
-                                    addFee usdAmountBuy actualFee
-                            in Just $ QuoteData { qdBTC = btc
-                                                , qdUSDRecipient = usdAmountSell
-                                                , qdUSDAccount =
-                                                   usdAmountBuyWithFee
-                                                , qdSufficientBalance =
-                                                   usdAmountBuyWithFee
-                                                       <= usdBalance
-                                                }
-            AmountBasedOnUSDBeforeFees usd -> do
-                btcAmountM <- simulateUSDBuy depthStoreHandle usd
-                case btcAmountM of
-                   DepthStoreAnswer btcAmount -> do
-                       usdAmountNeededM <-
-                           simulateBTCBuy depthStoreHandle btcAmount
-                       return $ case usdAmountNeededM of
-                                    DepthStoreAnswer usdAmountNeeded ->
-                                        let usdAmountWithFee =
-                                                addFee usdAmountNeeded actualFee
-                                        in Just $
-                                            QuoteData { qdBTC = btcAmount
-                                                      , qdUSDRecipient = usd
-                                                      , qdUSDAccount =
-                                                         usdAmountWithFee
-                                                      , qdSufficientBalance =
-                                                         usdAmountWithFee
-                                                             <= usdBalance
-                                                      }
-                                    _ -> Nothing
-                   _ -> return Nothing
-            AmountBasedOnUSDAfterFees usd -> do
-                let usdBeforeFee = subtractFee usd actualFee
-                btcAmountM <- simulateUSDSell depthStoreHandle usdBeforeFee
-                case btcAmountM of
-                   DepthStoreAnswer btcAmount -> do
-                       usdAmountRecipientM <-
-                           simulateBTCSell depthStoreHandle btcAmount
-                       return $ case usdAmountRecipientM of
-                                    DepthStoreAnswer usdAmountRecipient ->
-                                        Just $ QuoteData { qdBTC = btcAmount
-                                                         , qdUSDRecipient =
-                                                            usdAmountRecipient
-                                                         , qdUSDAccount = usd
-                                                         , qdSufficientBalance =
-                                                            usd <= usdBalance
-                                                         }
-                                    _ -> Nothing
-                   _ -> return Nothing
+    let answerChan = cdAnswerChan client
+    qc <- compileQuote bwHandles account amountType
+    let replyData = case qc of
+                        SuccessfulQuote quote -> Just quote
+                        _ -> Nothing
     writeChan answerChan $ ForwardQuoteToClient requestID replyData
-
-addFee :: Integer -> Double -> Integer
-addFee amount fee =
-    let markup = round $ fromIntegral amount * (fee / 100)
-    in amount + markup
-
-subtractFee :: Integer -> Double -> Integer
-subtractFee amount fee =
-    round $ fromIntegral amount * (100.0 / (100.0 + fee))
-
-unifyDepthStoreAnswers :: DepthStoreAnswer -> DepthStoreAnswer -> Maybe (Integer, Integer)
-unifyDepthStoreAnswers (DepthStoreAnswer a) (DepthStoreAnswer b) = Just (a, b)
-unifyDepthStoreAnswers _ _ = Nothing
 
 sendPong :: ClientData -> IO ()
 sendPong client = writeChan (cdAnswerChan client) SendPongToClient
+
+sendFailedSend :: ClientData -> Integer -> T.Text -> IO ()
+sendFailedSend client requestID reason =
+    writeChan (cdAnswerChan client) $ ForwardFailedSend requestID reason
 
 closeConnection :: ClientData -> IO ()
 closeConnection client =

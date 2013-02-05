@@ -52,8 +52,8 @@ data BridgewalkerHandles = BridgewalkerHandles
                                 :: MVar FilteredEventTaskState
                             , bhRebalancerHandle :: RebalancerHandle
                             , bhClientHubHandle :: ClientHubHandle
-                            , bhPendingActionsTrackerHandle
-                                :: PendingActionsTrackerHandle
+                            , bhPendingActionsTrackerHandleMVar
+                                :: MVar PendingActionsTrackerHandle
                             }
 
 getConfFile home = home </> ".bridgewalker/config"

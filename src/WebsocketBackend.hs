@@ -32,7 +32,6 @@ import CommonTypes
 import Config
 import DbUtils
 import LoggingUtils
-import PendingActionsTracker
 
 bridgewalkerServerVersion :: T.Text
 bridgewalkerServerVersion = "0.1"
@@ -214,7 +213,6 @@ websocketBackend bwHandles rq = do
 processMessages :: WS.TextProtocol p => BridgewalkerHandles -> WS.WebSockets p ()
 processMessages bwHandles = do
     let dbConn = bhDBConnCH bwHandles
-        patHandle = bhPendingActionsTrackerHandle bwHandles
         chHandle = bhClientHubHandle bwHandles
     msg <- WS.receiveData
     let cmd = parseWSCommand msg :: Either String WebsocketCommand
@@ -277,11 +275,8 @@ continueAuthenticated combinationChan sink chHandle account = forever $ do
             WSPing -> receivedPing chHandle account
             WSRequestQuote reqID amountType ->
                 requestQuote chHandle account reqID amountType
-            rq@WSSendPayment {} ->
-                let wsData = WS.textData . prepareWSReply $
-                                WSSendFailed (wcRequestID rq)
-                                    "Not yet implemented."
-                in WS.sendSink sink wsData
+            WSSendPayment reqID address amountType ->
+                sendPayment chHandle account reqID address amountType
             _ -> let wsData = WS.textData . prepareWSReply $
                                 WSCommandNotAvailable "Command not available\
                                                       \ after login."
@@ -298,6 +293,10 @@ continueAuthenticated combinationChan sink chHandle account = forever $ do
             ForwardQuoteToClient reqID (Just replyData) ->
                 let wsData = WS.textData . prepareWSReply $
                                                 WSQuote reqID replyData
+                in WS.sendSink sink wsData
+            ForwardFailedSend reqID reason ->
+                let wsData = WS.textData . prepareWSReply $
+                                WSSendFailed reqID reason
                 in WS.sendSink sink wsData
             SendPongToClient ->
                 let wsData = WS.textData . prepareWSReply $ WSPong
@@ -368,10 +367,10 @@ randomText len = do
         chars = map (\pos -> base58 !! pos) ints
     return $ T.pack chars
 
-addBuyAction dbConn action = withTransaction dbConn $ do
-    paState <- readPendingActionsStateFromDB dbConn
-    let paState' = addPendingActions paState [action]
-    writePendingActionsStateToDB dbConn paState'
+--addBuyAction dbConn action = withTransaction dbConn $ do
+--    paState <- readPendingActionsStateFromDB dbConn
+--    let paState' = addPendingActions paState [action]
+--    writePendingActionsStateToDB dbConn paState'
 
 --runWebsocketServer :: BridgewalkerHandles -> IO ()
 --runWebsocketServer bwHandles =

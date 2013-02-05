@@ -70,6 +70,7 @@ initBridgewalkerHandles connectInfo = do
     rbHandle <- initRebalancer appLogger (Just watchdogLogger)
                                     (bcRPCAuth bwConfig) mtgoxHandles
                                     (bcSafetyMarginBTC bwConfig)
+    patHandleMVar <- newEmptyMVar
     _ <- forkIO $ periodicRebalancing rbHandle
     let preliminaryBWHandles =
             BridgewalkerHandles { bhLoggingHandle = lHandle
@@ -87,18 +88,14 @@ initBridgewalkerHandles connectInfo = do
                                 , bhClientHubHandle =
                                     error "ClientHub was accessed,\
                                           \ but not initialized yet."
-                                , bhPendingActionsTrackerHandle =
-                                    error "PendingActionsTracker was accessed,\
-                                          \ but not initialized yet."
+                                , bhPendingActionsTrackerHandleMVar
+                                    = patHandleMVar
                                 }
     chHandle <- initClientHub preliminaryBWHandles
-    let preliminaryBWHandles' =
-            preliminaryBWHandles { bhClientHubHandle = chHandle }
-    patHandle <- initPendingActionsTracker readPendingActionsStateFromDB
-                    writePendingActionsStateToDB preliminaryBWHandles'
+    let bwHandles = preliminaryBWHandles { bhClientHubHandle = chHandle }
+    patHandle <- initPendingActionsTracker bwHandles
+    putMVar patHandleMVar patHandle
     _ <- forkIO $ periodicNudging patHandle
-    let bwHandles =
-            preliminaryBWHandles' { bhPendingActionsTrackerHandle = patHandle }
     return bwHandles
   where
     adapt :: Logger -> WatchdogLogger
@@ -132,24 +129,22 @@ displayStats stats =
     in putStrLn $ "Account activity: + $" ++ show usd
 
 actOnDeposits :: BridgewalkerHandles -> IO ()
-actOnDeposits bwHandles =
+actOnDeposits bwHandles = do
     let fbetHandle = bhFilteredBitcoinEventTaskHandle bwHandles
         fetStateCopy = bhFilteredEventStateCopy bwHandles
         dbConn = bhDBConnFBET bwHandles
-        patHandle = bhPendingActionsTrackerHandle bwHandles
+        patHandleMVar = bhPendingActionsTrackerHandleMVar bwHandles
         chHandle = bhClientHubHandle bwHandles
-    in forever $ do
+    patHandle <- readMVar patHandleMVar
+    forever $ do
         (fetState, fEvents) <- waitForFilteredBitcoinEvents fbetHandle
         mapM_ print fEvents
         let actions = concatMap convertToActions fEvents
         withTransaction dbConn $ do     -- atomic transaction: do not update
                                         -- fetState, before recording necessary
                                         -- actions to be done as a result
-            paState <- readPendingActionsStateFromDB dbConn
-            let paState' = addPendingActions paState actions
+            addPendingActions dbConn actions
             writeBitcoindStateToDB dbConn fetState
-            writePendingActionsStateToDB dbConn paState'
-            print paState'
             _ <- swapMVar fetStateCopy fetState
             return ()
         unless (null actions) $ nudgePendingActionsTracker patHandle

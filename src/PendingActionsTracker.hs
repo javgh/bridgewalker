@@ -10,6 +10,7 @@ import Control.Applicative
 import Control.Concurrent
 import Control.Error
 import Control.Monad
+import Control.Monad.IO.Class
 import Database.PostgreSQL.Simple
 import Data.List
 import Data.Time.Clock
@@ -20,14 +21,19 @@ import qualified Network.BitcoinRPC as RPC
 import qualified Data.Sequence as S
 
 import AddressUtils
-import ClientHub
 import CommonTypes
 import Config
 import DbUtils
 import LoggingUtils
+import PendingActionsTrackerQueueManagement
+import QuoteUtils
+
+import qualified ClientHub as CH
 
 pauseInterval :: NominalDiffTime
 pauseInterval = 60  -- pauses are 60 seconds long
+
+mtgoxCommunicationErrorMsg = "Currently unable to communicate with Mt.Gox."
 
 data PendingActionsStateModification = RemoveAction
                                      | ReplaceAction BridgewalkerAction
@@ -47,52 +53,67 @@ data WithdrawalAction = WithdrawalAction { waAddress :: RPC.BitcoinAddress
 
 data SellOrderProblem = MtGoxLowBalance | MtGoxCallError String
 
+data SendPaymentAnswer = SendPaymentSuccessful
+                            { spaAccount :: BridgewalkerAccount
+                            , spaRequestID :: Integer
+                            }
+                       | SendPaymentFailed
+                            { spaAccount :: BridgewalkerAccount
+                            , spaRequestID :: Integer
+                            , spaReason :: T.Text
+                            }
+
 initialPendingActionsState :: PendingActionsState
 initialPendingActionsState = PendingActionsState { pasSequence = S.empty
                                                  , pasStatus = ""
                                                  }
 
-initPendingActionsTracker :: (Connection -> IO (PendingActionsState)) -> (Connection -> PendingActionsState -> IO ()) -> BridgewalkerHandles -> IO (PendingActionsTrackerHandle)
-initPendingActionsTracker readState writeState bwHandles = do
+initPendingActionsTracker :: BridgewalkerHandles -> IO PendingActionsTrackerHandle
+initPendingActionsTracker bwHandles = do
     chan <- newChan
-    forkIO $ trackerLoop readState writeState bwHandles chan
+    forkIO $ trackerLoop bwHandles chan
     let handle = PendingActionsTrackerHandle chan
     nudgePendingActionsTracker handle
     return handle
 
-nudgePendingActionsTracker :: PendingActionsTrackerHandle -> IO ()
-nudgePendingActionsTracker (PendingActionsTrackerHandle chan) =
-    writeChan chan ()
-
-trackerLoop :: (Connection -> IO (PendingActionsState)) -> (Connection -> PendingActionsState -> IO ()) -> BridgewalkerHandles -> Chan () -> IO ()
-trackerLoop readState writeState bwHandles chan =
+trackerLoop :: BridgewalkerHandles -> Chan () -> IO ()
+trackerLoop bwHandles chan =
     let dbConn = bhDBConnPAT bwHandles
         chHandle = bhClientHubHandle bwHandles
     in forever $ do
         _ <- readChan chan
-        touchedAccounts <- withTransaction dbConn $ do
-            paState <- readState dbConn
+        (touchedAccounts, sendPaymentAnswerM) <- withTransaction dbConn $ do
+            paState <- readPendingActionsStateFromDB dbConn
             putStrLn $ "[PAT] >>>>>>>> Before processing: " ++ show paState
-            (paState', keepGoing, touchedAccounts) <- maybeProcessOneAction bwHandles paState
+            (paState', keepGoing, touchedAccounts, sendPaymentAnswerM)
+                <- maybeProcessOneAction bwHandles paState
             putStrLn $ "[PAT] >>>>>>>> After processing: " ++ show paState'
-            writeState dbConn paState'
+            writePendingActionsStateToDB dbConn paState'
             when keepGoing $ writeChan chan ()
-            return touchedAccounts
-        signalAccountUpdates chHandle touchedAccounts
+            return (touchedAccounts, sendPaymentAnswerM)
+        case sendPaymentAnswerM of
+            Nothing -> return ()
+            Just (SendPaymentSuccessful _ _) -> undefined
+            Just (SendPaymentFailed account requestID reason) ->
+                CH.signalFailedSend chHandle account requestID reason
+        CH.signalAccountUpdates chHandle touchedAccounts
 
-maybeProcessOneAction :: BridgewalkerHandles-> PendingActionsState -> IO (PendingActionsState, Bool, [BridgewalkerAccount])
+maybeProcessOneAction :: BridgewalkerHandles-> PendingActionsState-> IO(PendingActionsState,Bool,[BridgewalkerAccount],Maybe SendPaymentAnswer)
 maybeProcessOneAction bwHandles paState =
      case popPendingAction paState of
-            Nothing -> return (paState, False, [])
+            Nothing -> return (paState, False, [], Nothing)
             Just (action, paState') -> processOneAction bwHandles action paState'
 
-processOneAction :: BridgewalkerHandles-> BridgewalkerAction-> PendingActionsState-> IO (PendingActionsState, Bool, [BridgewalkerAccount])
+processOneAction :: BridgewalkerHandles-> BridgewalkerAction-> PendingActionsState-> IO(PendingActionsState,Bool,[BridgewalkerAccount],Maybe SendPaymentAnswer)
 processOneAction bwHandles action paState' = do
-    (modification, touchedAccounts) <- case action of
+    (modification, touchedAccounts, sendPaymentAnswerM) <- case action of
         DepositAction amount address ->
             processDeposit bwHandles amount address
         SellBTCAction amount account ->
             sellBTC bwHandles amount account
+        SendPaymentAction account requestID address amountType expiration ->
+            sendPayment bwHandles account
+                            requestID address amountType expiration
         BuyBTCAction amount address account ->
             buyBTC bwHandles amount address account
         SendBTCAction amount address account ->
@@ -103,31 +124,35 @@ processOneAction bwHandles action paState' = do
         RemoveAction ->
             -- nothing to be done, action has already been popped off;
             -- clear status and keep processing
-            return (paState' { pasStatus = "" }, True, touchedAccounts)
+            return (paState' { pasStatus = "" }, True
+                        , touchedAccounts, sendPaymentAnswerM)
         ReplaceAction newAction ->
             -- add another action in place of the one that was just
             -- removed and keep processing
             let paState'' = putPendingAction paState' newAction
-            in return (paState'' { pasStatus = "" }, True, touchedAccounts)
+            in return (paState'' { pasStatus = "" }, True
+                            , touchedAccounts, sendPaymentAnswerM)
         KeepAction ->
             -- put action back in the queue
-            return (putPendingAction paState' action, False, touchedAccounts)
+            return (putPendingAction paState' action, False
+                        , touchedAccounts, sendPaymentAnswerM)
         AddPauseAction status -> do
             -- put action back in the queue and also add
             -- a pause action
             let paState'' = putPendingAction paState' action
             expiration <- addUTCTime pauseInterval <$> getCurrentTime                       -- IO: getCurrentTime
             let paState''' = putPendingAction paState'' $ PauseAction expiration
-            return (paState''' { pasStatus = status }, False, touchedAccounts)
+            return (paState''' { pasStatus = status }, False
+                        , touchedAccounts, sendPaymentAnswerM)
 
-checkPause :: UTCTime -> IO (PendingActionsStateModification, [BridgewalkerAccount])
+checkPause :: UTCTime -> IO (PendingActionsStateModification, [BridgewalkerAccount], Maybe SendPaymentAnswer)
 checkPause expiration = do
     now <- getCurrentTime                                                                   -- IO: getCurrentTime
     return $ if now >= expiration
-                then (RemoveAction, [])
-                else (KeepAction, [])
+                then (RemoveAction, [], Nothing)
+                else (KeepAction, [], Nothing)
 
-processDeposit :: BridgewalkerHandles-> Integer -> RPC.BitcoinAddress -> IO (PendingActionsStateModification, [BridgewalkerAccount])
+processDeposit :: BridgewalkerHandles-> Integer -> RPC.BitcoinAddress -> IO (PendingActionsStateModification, [BridgewalkerAccount], Maybe SendPaymentAnswer)
 processDeposit bwHandles amount address = do
     let dbConn = bhDBConnPAT bwHandles
         logger = bhAppLogger bwHandles
@@ -140,7 +165,7 @@ processDeposit bwHandles amount address = do
                             { lcInfo = "Deposit to system -\
                                        \ no matching account found." }
             logger logMsg                                                                   -- IO: Logger
-            return (RemoveAction, [])
+            return (RemoveAction, [], Nothing)
         Just (BridgewalkerAccount account) -> do
             btcBalance <- getBTCInBalance dbConn account                                    -- IO: Database
             let newBalance = btcBalance + amount
@@ -162,10 +187,10 @@ processDeposit bwHandles amount address = do
                                             { baAmount = newBalance
                                             , baAccount = bwAccount
                                             }
-                             in (ReplaceAction action, [bwAccount])
-                        else (RemoveAction, [bwAccount])
+                             in (ReplaceAction action, [bwAccount], Nothing)
+                        else (RemoveAction, [bwAccount], Nothing)
 
-sellBTC :: BridgewalkerHandles-> Integer-> BridgewalkerAccount-> IO (PendingActionsStateModification, [BridgewalkerAccount])
+sellBTC :: BridgewalkerHandles-> Integer-> BridgewalkerAccount-> IO (PendingActionsStateModification, [BridgewalkerAccount], Maybe SendPaymentAnswer)
 sellBTC bwHandles amount bwAccount = do
     let mtgoxHandles = bhMtGoxHandles bwHandles
         safetyMarginBTC = bcSafetyMarginBTC . bhConfig $ bwHandles
@@ -181,14 +206,15 @@ sellBTC bwHandles amount bwAccount = do
                                        \ " ++ msg }
             logger logMsg                                                                   -- IO: Logger
             return (AddPauseAction "Communication problems with Mt.Gox\
-                                   \ - pausing until it is resolved.", [])
+                                   \ - pausing until it is resolved."
+                                   , [], Nothing)
         Left MtGoxLowBalance -> do
             let logMsg = MtGoxLowBTCBalance
                         { lcInfo = "Postponing BTC sell order because of low\
                                    \ balance in Mt.Gox account." }
             logger logMsg                                                                   -- IO: Logger
             return (AddPauseAction "Pausing until rebalancing of\
-                                   \ reserves is completed.", [])
+                                   \ reserves is completed.", [], Nothing)
         Right stats -> do
             let usdAmount = max 0 (usdEarned stats - usdFee stats)
             btcBalance <- getBTCInBalance dbConn account                                    -- IO: Database
@@ -208,9 +234,82 @@ sellBTC bwHandles amount bwAccount = do
                                         ++ show newBTCBalance ++ " BTC."
                             }
             logger logMsg                                                                   -- IO: Logger
-            return (RemoveAction, [BridgewalkerAccount account])
+            return (RemoveAction, [BridgewalkerAccount account], Nothing)
 
-buyBTC :: BridgewalkerHandles-> Integer-> RPC.BitcoinAddress-> BridgewalkerAccount-> IO (PendingActionsStateModification, [BridgewalkerAccount])
+-- TODO: add check for other Bridgewalker user
+sendPayment :: BridgewalkerHandles-> BridgewalkerAccount-> Integer-> RPC.BitcoinAddress-> AmountType-> UTCTime-> IO(PendingActionsStateModification, [BridgewalkerAccount], Maybe SendPaymentAnswer)
+sendPayment bwHandles account requestID address amountType expiration = do
+    result <- runEitherT go
+    case result of
+        Left errMsg ->
+            let answer = SendPaymentFailed account requestID (T.pack errMsg)
+            in return (RemoveAction, [], Just answer)
+        Right _ ->
+            let answer = SendPaymentFailed account requestID
+                            "Could have worked, if implemented."
+            in return (RemoveAction, [], Just answer)
+  where
+    go = do
+            now <- liftIO getCurrentTime
+            tryAssert busyMsg (now < expiration)
+            sendPaymentPreparationChecks bwHandles account address amountType
+            tryAssert busyMsg (now < expiration)    -- check again, as some
+                                                    -- previous checks might
+                                                    -- have blocked for a while
+            return ()
+    busyMsg = "The server is very busy at the moment. Please try again later."
+
+
+sendPaymentPreparationChecks :: BridgewalkerHandles-> BridgewalkerAccount-> RPC.BitcoinAddress-> AmountType-> EitherT String IO ()
+sendPaymentPreparationChecks bwHandles account address amountType = do
+    validatedAddress <- checkAddress bwHandles address
+    qc <- liftIO $ compileQuote bwHandles account amountType
+    quoteData <- case qc of
+                    SuccessfulQuote qd -> return qd
+                    HadNotEnoughDepth -> left "The entered amount is too large."
+                    DepthStoreWasUnavailable -> left mtgoxCommunicationErrorMsg
+    tryAssert "Insufficient funds to complete the transaction." $
+                    qdSufficientBalance quoteData
+    checkMtGoxWallet bwHandles (qdUSDAccount quoteData)
+    checkBitcoindWallet bwHandles (qdBTC quoteData)
+    return ()
+
+checkMtGoxWallet :: BridgewalkerHandles -> Integer -> EitherT String IO ()
+checkMtGoxWallet bwHandles neededUSDAmount = do
+    let mtgoxHandles = bhMtGoxHandles bwHandles
+        safetyMarginUSD = bcSafetyMarginUSD . bhConfig $ bwHandles
+    privateInfo <- noteT mtgoxCommunicationErrorMsg
+                    . MaybeT $ callHTTPApi mtgoxHandles getPrivateInfoR
+    tryAssert "The server's hot wallet is running low."
+                (piUsdBalance privateInfo >= neededUSDAmount + safetyMarginUSD)
+    return ()
+
+checkBitcoindWallet :: BridgewalkerHandles -> Integer -> EitherT String IO ()
+checkBitcoindWallet bwHandles neededBTCAmount = do
+    let rpcAuth = bcRPCAuth . bhConfig $ bwHandles
+        safetyMarginBTC = bcSafetyMarginBTC . bhConfig $ bwHandles
+        watchdogLogger = bhWatchdogLogger bwHandles
+    btcSystemBalance <- liftIO $ RPC.getBalanceR (Just watchdogLogger) rpcAuth
+                                                     confsNeededForSending True
+    tryAssert "The server is currently busy rebalancing its reserves.\
+              \ Please try again later."
+              (neededBTCAmount + safetyMarginBTC
+                    <= adjustAmount btcSystemBalance)
+    return ()
+
+checkAddress :: BridgewalkerHandles-> RPC.BitcoinAddress -> EitherT String IO RPC.BitcoinAddress
+checkAddress bwHandles address = do
+    let watchdogLogger = bhWatchdogLogger bwHandles
+        rpcAuth = bcRPCAuth . bhConfig $ bwHandles
+        isNotNull = not $ T.null (adjustAddr address)
+    tryAssert "No Bitcoin address was given." isNotNull
+    info <- liftIO $ RPC.validateAddressR (Just watchdogLogger) rpcAuth address
+    tryAssert "This does not seem to be a valid Bitcoin address."
+                    (RPC.baiIsValid info)
+    return address
+
+
+buyBTC :: BridgewalkerHandles-> Integer-> RPC.BitcoinAddress-> BridgewalkerAccount-> IO (PendingActionsStateModification, [BridgewalkerAccount], Maybe SendPaymentAnswer)
 buyBTC bwHandles amount address bwAccount = do
     let mtgoxHandles = bhMtGoxHandles bwHandles
         depthStoreHandle = mtgoxDepthStoreHandle mtgoxHandles
@@ -229,20 +328,21 @@ buyBTC bwHandles amount address bwAccount = do
                                        \ BTC buy order." }
             logger logMsg                                                                   -- IO: ...
             return (AddPauseAction "Communication problems with Mt.Gox\
-                                   \ - pausing until it is resolved.", [])
-        NotEnoughDepth -> return (RemoveAction, []) -- TODO: maybe log something
+                                   \ - pausing until it is resolved."
+                                   , [], Nothing)
+        NotEnoughDepth -> return (RemoveAction, [], Nothing) -- TODO: maybe log something
         DepthStoreAnswer usdAmount -> do
             usdBalance <- getUSDBalance dbConn account
             -- TODO: take fees into account
             if usdAmount > usdBalance
-                then return (RemoveAction, []) -- TODO: figure out way in which to inform user;
-                                               --       probably via transaction log
+                then return (RemoveAction, [], Nothing) -- TODO: figure out way in which to inform user;
+                                                        --       probably via transaction log
                 else do
                     buy <- tryToExecuteBuyOrder mtgoxHandles safetyMarginUSD
                                 amount usdAmount
                     processBuyResult logger dbConn bwAccount amount address buy
 
-processBuyResult :: Logger-> Connection-> BridgewalkerAccount-> Integer-> RPC.BitcoinAddress-> Either SellOrderProblem OrderStats-> IO (PendingActionsStateModification, [BridgewalkerAccount])
+processBuyResult :: Logger-> Connection-> BridgewalkerAccount-> Integer-> RPC.BitcoinAddress-> Either SellOrderProblem OrderStats-> IO (PendingActionsStateModification, [BridgewalkerAccount], Maybe SendPaymentAnswer)
 processBuyResult logger dbConn bwAccount btcAmount address buy = do
     let account = bAccount $ bwAccount
     case buy of
@@ -253,14 +353,16 @@ processBuyResult logger dbConn bwAccount btcAmount address buy = do
                                        \ " ++ msg }
             logger logMsg
             return (AddPauseAction "Communication problems with Mt.Gox\
-                                   \ - pausing until it is resolved.", [])
+                                   \ - pausing until it is resolved."
+                                   , [], Nothing)
         Left MtGoxLowBalance -> do
             let logMsg = MtGoxLowBTCBalance
                         { lcInfo = "Postponing BTC buy order because of low\
                                    \ balance in Mt.Gox account." }
             logger logMsg
             return (AddPauseAction "Hot wallet is running low - pausing\
-                                   \ until resolved via cold reserves.", [])
+                                   \ until resolved via cold reserves."
+                                   , [], Nothing)
         Right stats -> do
             let usdAmount = usdSpent stats + usdFee stats
             usdBalance <- getUSDBalance dbConn account
@@ -284,9 +386,9 @@ processBuyResult logger dbConn bwAccount btcAmount address buy = do
                                             = address
                                        , baAccount = bwAccount
                                        }
-            return (ReplaceAction action, [bwAccount])
+            return (ReplaceAction action, [bwAccount], Nothing)
 
-sendBTC :: BridgewalkerHandles-> Integer-> RPC.BitcoinAddress-> BridgewalkerAccount-> IO (PendingActionsStateModification, [BridgewalkerAccount])
+sendBTC :: BridgewalkerHandles-> Integer-> RPC.BitcoinAddress-> BridgewalkerAccount-> IO (PendingActionsStateModification, [BridgewalkerAccount], Maybe SendPaymentAnswer)
 sendBTC bwHandles amount address bwAccount = do
     let rpcAuth = bcRPCAuth . bhConfig $ bwHandles
         safetyMarginBTC = bcSafetyMarginBTC . bhConfig $ bwHandles
@@ -308,7 +410,7 @@ sendBTC bwHandles amount address bwAccount = do
                                     , lcInfo = networkOrParseError
                                     }
                     logger logMsg
-                    return (RemoveAction, [bwAccount])
+                    return (RemoveAction, [bwAccount], Nothing)
                 Right result' -> do
                     case result' of
                         Left sendError -> do
@@ -321,7 +423,7 @@ sendBTC bwHandles amount address bwAccount = do
                                             , lcInfo = show sendError
                                             }
                             logger logMsg
-                            return (RemoveAction, [bwAccount])
+                            return (RemoveAction, [bwAccount], Nothing)
                         Right txID -> do
                             let logMsg = BTCSent
                                             { lcAccount = account
@@ -336,14 +438,14 @@ sendBTC bwHandles amount address bwAccount = do
                                                 ++ "."
                                             }
                             logger logMsg
-                            return (RemoveAction, [bwAccount])
+                            return (RemoveAction, [bwAccount], Nothing)
         else do
             let logMsg = BitcoindLowBTCBalance
                         { lcInfo = "Postponing BTC send action because of low\
                                    \ local BTC balance." }
             logger logMsg
             return (AddPauseAction "Pausing until rebalancing of\
-                                   \ reserves is completed.", [])
+                                   \ reserves is completed.", [], Nothing)
 
 tryToExecuteSellOrder :: MtGoxAPIHandles-> Integer -> Integer -> IO (Either SellOrderProblem OrderStats)
 tryToExecuteSellOrder mtgoxHandles safetyMarginBTC amount = runEitherT $ do
@@ -369,28 +471,3 @@ tryToExecuteBuyOrder mtgoxHandles safetyMarginUSD amountBTC amountUSD = runEithe
 
 adjustMtGoxError (Left err) = Left (MtGoxCallError err)
 adjustMtGoxError (Right result) = Right result
-
-popPendingAction :: PendingActionsState-> Maybe (BridgewalkerAction, PendingActionsState)
-popPendingAction state =
-    let sequence = pasSequence state
-    in if S.null sequence
-            then Nothing
-            else let (a, as) = S.splitAt 1 sequence
-                     action = S.index a 0   -- should always succeed as
-                                            -- we checked that the sequence
-                                            -- is not empty
-                 in Just (action, state { pasSequence = as })
-
--- | Add a new action to the front of the pending actions queue.
-putPendingAction state action =
-    let sequence = pasSequence state
-    in state { pasSequence = action S.<| sequence }
-
--- | Add a new action to the end of the pending actions queue.
-addPendingAction :: PendingActionsState-> BridgewalkerAction -> PendingActionsState
-addPendingAction state action =
-    let sequence = pasSequence state
-    in state { pasSequence = sequence S.|> action }
-
-addPendingActions :: PendingActionsState-> [BridgewalkerAction] -> PendingActionsState
-addPendingActions = foldl' addPendingAction

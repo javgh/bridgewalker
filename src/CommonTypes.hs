@@ -59,6 +59,12 @@ data BridgewalkerAction = DepositAction { baAmount :: Integer
                         | SellBTCAction { baAmount :: Integer
                                         , baAccount :: BridgewalkerAccount
                                         }
+                        | SendPaymentAction { baAccount :: BridgewalkerAccount
+                                            , baRequestID :: Integer
+                                            , baAddress :: RPC.BitcoinAddress
+                                            , baAmountType :: AmountType
+                                            , baExpiration :: UTCTime
+                                            }
                         | BuyBTCAction { baAmount :: Integer
                                        , baAddress :: RPC.BitcoinAddress
                                        , baAccount :: BridgewalkerAccount
@@ -73,6 +79,8 @@ data BridgewalkerAction = DepositAction { baAmount :: Integer
 
 data ClientHubAnswer = ForwardStatusToClient ClientStatus
                      | ForwardQuoteToClient Integer (Maybe QuoteData)
+                     | ForwardSuccessfulSend Integer
+                     | ForwardFailedSend Integer T.Text
                      | SendPongToClient
                      | CloseConnectionWithClient
 
@@ -85,11 +93,25 @@ data ClientHubCommand = RegisterClient { chcAccount :: BridgewalkerAccount
                                      , chcRequestID :: Integer
                                      , chcAmountType :: AmountType
                                      }
+                      | SendPayment { chcAccount :: BridgewalkerAccount
+                                    , chcRequestID :: Integer
+                                    , chcAddress :: T.Text
+                                    , chcAmountType :: AmountType
+                                    }
                       | ReceivedPing { chcAccount :: BridgewalkerAccount }
                       | CheckTimeouts
                       | SignalPossibleBitcoinEvents
                       | SignalAccountUpdates { chcAccounts ::
                                                     [BridgewalkerAccount] }
+                      | SignalSuccessfulSend
+                            { chcAccount :: BridgewalkerAccount
+                            , chcRequestID :: Integer
+                            }
+                      | SignalFailedSend
+                            { chcAccount :: BridgewalkerAccount
+                            , chcRequestID :: Integer
+                            , chcReason :: T.Text
+                            }
 
 newtype ClientHubHandle = ClientHubHandle { unCHH :: Chan ClientHubCommand }
 
@@ -103,7 +125,9 @@ data ClientStatus = ClientStatus { csUSDBalance :: Integer
 data AmountType = AmountBasedOnBTC Integer
                 | AmountBasedOnUSDBeforeFees Integer
                 | AmountBasedOnUSDAfterFees Integer
-                deriving (Show)
+                deriving (Generic, Show)
+
+instance Serialize AmountType
 
 data QuoteData = QuoteData { qdBTC :: Integer
                            , qdUSDRecipient :: Integer
