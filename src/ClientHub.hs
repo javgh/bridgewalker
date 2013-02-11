@@ -8,6 +8,7 @@ module ClientHub
     , sendPayment
     , signalPossibleBitcoinEvents
     , signalAccountUpdates
+    , signalSuccessfulSend
     , signalFailedSend
     , receivedPing
     ) where
@@ -133,6 +134,11 @@ clientHubLoop (ClientHubHandle chChan) bwHandles = do
                     Nothing -> return ()
                     Just client -> sendFailedSend client requestID reason
                 go clientSet addressCache accountCache
+            SignalSuccessfulSend account requestID -> do
+                case I.getOne (clientSet @= account) of
+                    Nothing -> return ()
+                    Just client -> sendSuccessfulSend client requestID
+                go clientSet addressCache accountCache
             CheckTimeouts -> do
                 now <- getCurrentTime
                 let cutoff = addUTCTime (-1 * fromIntegral timeoutInSeconds) now
@@ -208,9 +214,9 @@ signalAccountUpdates (ClientHubHandle chChan) accounts = do
     writeChan chChan $ SignalAccountUpdates accounts
     return ()
 
---signalSuccessfulSend (ClientHubHandle chChan) account requestID = do
---    writeChan chChan $ SignalSuccessfulSend account requestID
---    return ()
+signalSuccessfulSend (ClientHubHandle chChan) account requestID = do
+    writeChan chChan $ SignalSuccessfulSend account requestID
+    return ()
 
 signalFailedSend (ClientHubHandle chChan) account requestID reason = do
     writeChan chChan $ SignalFailedSend account requestID reason
@@ -254,6 +260,10 @@ sendQuote bwHandles client account requestID amountType = do
 
 sendPong :: ClientData -> IO ()
 sendPong client = writeChan (cdAnswerChan client) SendPongToClient
+
+sendSuccessfulSend :: ClientData -> Integer -> IO ()
+sendSuccessfulSend client requestID =
+    writeChan (cdAnswerChan client) $ ForwardSuccessfulSend requestID
 
 sendFailedSend :: ClientData -> Integer -> T.Text -> IO ()
 sendFailedSend client requestID reason =

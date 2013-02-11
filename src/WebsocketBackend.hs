@@ -294,6 +294,10 @@ continueAuthenticated combinationChan sink chHandle account = forever $ do
                 let wsData = WS.textData . prepareWSReply $
                                                 WSQuote reqID replyData
                 in WS.sendSink sink wsData
+            ForwardSuccessfulSend reqID ->
+                let wsData = WS.textData . prepareWSReply $
+                                WSSendSuccessful reqID
+                in WS.sendSink sink wsData
             ForwardFailedSend reqID reason ->
                 let wsData = WS.textData . prepareWSReply $
                                 WSSendFailed reqID reason

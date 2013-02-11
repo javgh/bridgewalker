@@ -167,8 +167,16 @@ data LogContent = RebalancerFailure { lcInfo :: String }
                           , lcInfo :: String
                           }
                 | BTCBought { lcAccount :: Integer
+                            , lcUSDSpent :: Integer
+                            , lcUSDFee :: Integer
+                            , lcUSDExtraFee :: Integer
                             , lcInfo :: String
                             }
+                | AccountDebited { lcAccount :: Integer
+                                 , lcAmount :: Integer
+                                 , lcBalance :: Integer
+                                 , lcInfo :: String
+                                 }
                 | MtGoxLowBTCBalance { lcInfo :: String }
                 | MtGoxError { lcInfo :: String }
                 | BitcoindLowBTCBalance { lcInfo :: String }
@@ -186,6 +194,10 @@ data LogContent = RebalancerFailure { lcInfo :: String }
                                , lcAmount :: Integer
                                , lcInfo :: String
                                }
+                | SendPaymentFailedCheck { lcAccount :: Integer
+                                         , lcAddress :: String
+                                         , lcInfo :: String
+                                         }
                 | GuestAccountCreated { lcAccountName :: String }
                 | UserLoggedIn { lcAccount :: Integer }
                 | DisconnectedStaleClient

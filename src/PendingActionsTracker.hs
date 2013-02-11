@@ -15,6 +15,8 @@ import Database.PostgreSQL.Simple
 import Data.List
 import Data.Time.Clock
 import Network.MtGoxAPI
+import Text.Printf
+import Text.Regex
 
 import qualified Data.Text as T
 import qualified Network.BitcoinRPC as RPC
@@ -34,6 +36,10 @@ pauseInterval :: NominalDiffTime
 pauseInterval = 60  -- pauses are 60 seconds long
 
 mtgoxCommunicationErrorMsg = "Currently unable to communicate with Mt.Gox."
+
+fatalSendPaymentError = "An untimely error has left your account in an\
+                        \ inconsistent state. Please contact support.\
+                        \ Sorry for the inconvenience!"
 
 data PendingActionsStateModification = RemoveAction
                                      | ReplaceAction BridgewalkerAction
@@ -93,7 +99,8 @@ trackerLoop bwHandles chan =
             return (touchedAccounts, sendPaymentAnswerM)
         case sendPaymentAnswerM of
             Nothing -> return ()
-            Just (SendPaymentSuccessful _ _) -> undefined
+            Just (SendPaymentSuccessful account requestID) ->
+                CH.signalSuccessfulSend chHandle account requestID
             Just (SendPaymentFailed account requestID reason) ->
                 CH.signalFailedSend chHandle account requestID reason
         CH.signalAccountUpdates chHandle touchedAccounts
@@ -239,28 +246,134 @@ sellBTC bwHandles amount bwAccount = do
 -- TODO: add check for other Bridgewalker user
 sendPayment :: BridgewalkerHandles-> BridgewalkerAccount-> Integer-> RPC.BitcoinAddress-> AmountType-> UTCTime-> IO(PendingActionsStateModification, [BridgewalkerAccount], Maybe SendPaymentAnswer)
 sendPayment bwHandles account requestID address amountType expiration = do
+    let logger = bhAppLogger bwHandles
     result <- runEitherT go
     case result of
-        Left errMsg ->
+        Left errMsg -> do
             let answer = SendPaymentFailed account requestID (T.pack errMsg)
-            in return (RemoveAction, [], Just answer)
+                logMsg = SendPaymentFailedCheck
+                            { lcAccount = bAccount account
+                            , lcAddress = T.unpack (adjustAddr address)
+                            , lcInfo = errMsg
+                            }
+            logger logMsg
+            return (RemoveAction, [], Just answer)
         Right _ ->
-            let answer = SendPaymentFailed account requestID
-                            "Could have worked, if implemented."
-            in return (RemoveAction, [], Just answer)
+            let answer = SendPaymentSuccessful account requestID
+            in return (RemoveAction, [account], Just answer)
   where
     go = do
             now <- liftIO getCurrentTime
             tryAssert busyMsg (now < expiration)
-            sendPaymentPreparationChecks bwHandles account address amountType
+            quoteData <- sendPaymentPreparationChecks bwHandles account
+                                                            address amountType
             tryAssert busyMsg (now < expiration)    -- check again, as some
                                                     -- previous checks might
                                                     -- have blocked for a while
-            return ()
+            btcAmountToSend <- buyBTC' bwHandles account quoteData
+            txID <- sendBTC' bwHandles account address btcAmountToSend
+            return txID
     busyMsg = "The server is very busy at the moment. Please try again later."
 
+sendBTC' :: BridgewalkerHandles-> BridgewalkerAccount-> RPC.BitcoinAddress-> Integer-> EitherT String IO RPC.TransactionID
+sendBTC' bwHandles bwAccount address btcAmountToSend = do
+    let rpcAuth = bcRPCAuth . bhConfig $ bwHandles
+        account = bAccount bwAccount
+        logger = bhAppLogger bwHandles
+    rpcResult <- liftIO $ RPC.sendToAddress rpcAuth
+                                    address (adjustAmount btcAmountToSend)
+    case rpcResult of
+        Left networkOrParseError -> do
+            let logMsg = BTCSendNetworkOrParseError
+                            { lcAccount = account
+                            , lcAddress = T.unpack . RPC.btcAddress $ address
+                            , lcAmount = btcAmountToSend
+                            , lcInfo = networkOrParseError
+                            }
+            liftIO $ logger logMsg
+            left fatalSendPaymentError
+        Right (Left sendError) -> do
+            let logMsg = BTCSendError
+                            { lcAccount = account
+                            , lcAddress = T.unpack . RPC.btcAddress $ address
+                            , lcAmount = btcAmountToSend
+                            , lcInfo = show sendError
+                            }
+            liftIO $ logger logMsg
+            left fatalSendPaymentError
+        Right (Right txID) -> do
+            let info = "Account " ++ show account ++ " sent out "
+                        ++ formatBTCAmount btcAmountToSend ++ " BTC to "
+                        ++ (T.unpack . RPC.btcAddress $ address)
+                        ++ " with transaction "
+                        ++ (T.unpack . RPC.btcTxID $ txID) ++ "."
+                logMsg = BTCSent { lcAccount = account
+                                 , lcInfo = info
+                                  }
+            liftIO $ logger logMsg
+            return txID
 
-sendPaymentPreparationChecks :: BridgewalkerHandles-> BridgewalkerAccount-> RPC.BitcoinAddress-> AmountType-> EitherT String IO ()
+buyBTC' :: BridgewalkerHandles-> BridgewalkerAccount -> QuoteData -> EitherT String IO Integer
+buyBTC' bwHandles bwAccount quoteData = do
+    let mtgoxHandles = bhMtGoxHandles bwHandles
+        logger = bhAppLogger bwHandles
+        dbConn = bhDBConnPAT bwHandles
+        account = bAccount bwAccount
+        targetFee = bcTargetExchangeFee . bhConfig $ bwHandles
+        btcAmount = qdBTC quoteData
+    mtgoxOrder <- liftIO $ callHTTPApi mtgoxHandles submitOrder
+                                            OrderTypeBuyBTC btcAmount
+    orderStats <- case mtgoxOrder of
+                    Left err -> do
+                        let logMsg = MtGoxError err
+                        liftIO $ logger logMsg
+                        left mtgoxCommunicationErrorMsg
+                    Right stats -> return stats
+    let extraFee = determineExtraFees orderStats targetFee
+        totalCost = usdSpent orderStats + usdFee orderStats + extraFee
+    let logMsg = BTCBought
+                    { lcAccount = account
+                    , lcUSDSpent = usdSpent orderStats
+                    , lcUSDFee = usdFee orderStats
+                    , lcUSDExtraFee = extraFee
+                    , lcInfo = formatBTCAmount btcAmount
+                                ++ " BTC bought on Mt.Gox for a total cost of "
+                                ++ formatUSDAmount totalCost ++ " USD."
+                    }
+    liftIO $ logger logMsg
+    usdBalance <- liftIO $ getUSDBalance dbConn account
+    let newUSDBalance = usdBalance - totalCost
+    btcAmountToSend
+        <- if newUSDBalance >= 0
+            then do
+                let info = "Account " ++ show account ++ " debited "
+                            ++ formatUSDAmount totalCost ++ " USD for buying "
+                            ++ formatBTCAmount btcAmount ++ " BTC"
+                            ++ " - new balance is "
+                            ++ formatUSDAmount newUSDBalance ++ " USD."
+                    logMsg' = AccountDebited
+                                { lcAccount = account
+                                , lcAmount = totalCost
+                                , lcBalance = newUSDBalance
+                                , lcInfo = info
+                                }
+                liftIO $ logger logMsg'
+                liftIO $ execute dbConn "update accounts set usd_balance=?\
+                                        \ where account_nr=?"
+                                        (newUSDBalance, account)
+                return btcAmount
+            else do
+                undefined
+    return btcAmountToSend
+
+determineExtraFees :: OrderStats -> Double -> Integer
+determineExtraFees orderStats targetFee =
+    let targetMarkup =
+            round $ fromIntegral (usdSpent orderStats) * (targetFee / 100)
+    in max 0 (targetMarkup - usdFee orderStats)
+
+
+sendPaymentPreparationChecks :: BridgewalkerHandles-> BridgewalkerAccount-> RPC.BitcoinAddress-> AmountType-> EitherT String IO QuoteData
 sendPaymentPreparationChecks bwHandles account address amountType = do
     validatedAddress <- checkAddress bwHandles address
     qc <- liftIO $ compileQuote bwHandles account amountType
@@ -270,9 +383,34 @@ sendPaymentPreparationChecks bwHandles account address amountType = do
                     DepthStoreWasUnavailable -> left mtgoxCommunicationErrorMsg
     tryAssert "Insufficient funds to complete the transaction." $
                     qdSufficientBalance quoteData
+    checkOrderRange quoteData bwHandles
     checkMtGoxWallet bwHandles (qdUSDAccount quoteData)
     checkBitcoindWallet bwHandles (qdBTC quoteData)
-    return ()
+    return quoteData
+
+checkOrderRange :: QuoteData -> BridgewalkerHandles -> EitherT String IO ()
+checkOrderRange quoteData bwHandles = do
+    let maximalOrderBTC = bcMaximalOrderBTC . bhConfig $ bwHandles
+        minimalOrderBTC = bcMtGoxMinimalOrderBTC . bhConfig $ bwHandles
+        minimalOrderBTCStr = formatBTCAmount minimalOrderBTC ++ " BTC"
+        maximalOrderBTCStr = formatBTCAmount maximalOrderBTC ++ " BTC"
+        btcAmount = qdBTC quoteData
+    tryAssert ("Currently the minimal order size is "
+                ++ minimalOrderBTCStr ++ ".") $ btcAmount >= minimalOrderBTC
+    tryAssert ("Currently the maximal order size is "
+                ++ maximalOrderBTCStr ++ ".") $ btcAmount <= maximalOrderBTC
+
+formatBTCAmount :: Integer -> String
+formatBTCAmount a =
+    let a' = fromIntegral a / 10 ^ (8 :: Integer) :: Double
+        str = printf "%.8f" a'
+    in subRegex (mkRegex "\\.?0+$") str ""
+
+formatUSDAmount :: Integer -> String
+formatUSDAmount a =
+    let a' = fromIntegral a / 10 ^ (5 :: Integer) :: Double
+        str = printf "%.5f" a'
+    in subRegex (mkRegex "\\.?0+$") str ""
 
 checkMtGoxWallet :: BridgewalkerHandles -> Integer -> EitherT String IO ()
 checkMtGoxWallet bwHandles neededUSDAmount = do
@@ -372,15 +510,15 @@ processBuyResult logger dbConn bwAccount btcAmount address buy = do
             execute dbConn "update accounts set usd_balance=?\
                                 \ where account_nr=?"
                                 (newUSDBalance, account)
-            let logMsg = BTCBought
-                            { lcAccount = account
-                            , lcInfo = show btcAmount
-                                        ++ " BTC bought on Mt.Gox and subtracted "
-                                        ++ show usdAmount ++ " USD from account "
-                                        ++ show account ++ " - balance is now "
-                                        ++ show newUSDBalance ++ " USD."
-                            }
-            logger logMsg
+--            let logMsg = BTCBought
+--                            { lcAccount = account
+--                            , lcInfo = show btcAmount
+--                                        ++ " BTC bought on Mt.Gox and subtracted "
+--                                        ++ show usdAmount ++ " USD from account "
+--                                        ++ show account ++ " - balance is now "
+--                                        ++ show newUSDBalance ++ " USD."
+--                            }
+--            logger logMsg
             let action = SendBTCAction { baAmount = btcAmount
                                        , CommonTypes.baAddress
                                             = address

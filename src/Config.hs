@@ -29,6 +29,7 @@ data BridgewalkerConfig = BridgewalkerConfig
                             , bcMtGoxCredentials :: !MtGoxCredentials
                             , bcSafetyMarginBTC :: !Integer
                             , bcSafetyMarginUSD :: !Integer
+                            , bcMaximalOrderBTC :: !Integer
                             , bcMtGoxMinimalOrderBTC :: !Integer
                             , bcTargetExchangeFee :: !Double
                             , bcNotifyFile :: !FilePath
@@ -72,6 +73,7 @@ readConfig = do
             authSecretScrambled <- get cp "DEFAULT" "mtgox_auth_secret"
             safetyMarginBTCF <- get cp "DEFAULT" "safety_margin_btc"
             safetyMarginUSDF <- get cp "DEFAULT" "safety_margin_usd"
+            maximalOrderBTCF <- get cp "DEFAULT" "maximal_order_btc"
             mtgoxMinimalOrderBTCF <- get cp "DEFAULT" "mtgox_minimal_order_btc"
             targetExchangeFee <- get cp "DEFAULT" "target_exchange_fee"
             notifyFile <- get cp "DEFAULT" "bitcoind_notify_file"
@@ -84,15 +86,29 @@ readConfig = do
                     round $ (safetyMarginBTCF :: Double) * 10 ^ (8 :: Integer)
                 safetyMarginUSD =
                     round $ (safetyMarginUSDF :: Double) * 10 ^ (5 :: Integer)
+                maximalOrderBTC =
+                    round $ (maximalOrderBTCF :: Double) * 10 ^ (8 :: Integer)
                 mtgoxMinimalOrderBTC =
                     round $ (mtgoxMinimalOrderBTCF :: Double)
                                 * 10 ^ (8 :: Integer)
+            workingFund <- liftIO $ readTargetBalance
+            case workingFund of
+                Nothing ->
+                    throwError (OtherProblem "Unable to read size\
+                                             \ of working fund.", "")
+                Just wf ->
+                    when (safetyMarginBTC + maximalOrderBTC > wf) $
+                        throwError (OtherProblem "Working fund not large\
+                                                 \ enough to deal with\
+                                                 \ largest possible order."
+                                                 , "")
             return $ BridgewalkerConfig
                         { bcRPCAuth = rpcAuth
                         , bcMtGoxCredentials =
                             initMtGoxCredentials authKey authSecret
                         , bcSafetyMarginBTC = safetyMarginBTC
                         , bcSafetyMarginUSD = safetyMarginUSD
+                        , bcMaximalOrderBTC = maximalOrderBTC
                         , bcMtGoxMinimalOrderBTC = mtgoxMinimalOrderBTC
                         , bcTargetExchangeFee = targetExchangeFee
                         , bcNotifyFile = notifyFile

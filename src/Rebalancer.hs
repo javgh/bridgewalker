@@ -2,6 +2,7 @@ module Rebalancer
     ( initRebalancer
     , runRebalancer
     , decideRebalance
+    , readTargetBalance
     , RebalancerHandle
     , RebalancerLog(..)
     , RebalancerAction(..)
