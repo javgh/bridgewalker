@@ -258,7 +258,6 @@ sellBTC bwHandles amount bwAccount = do
                     logger logMsg'
                     return (ReplaceAction action, [bwAccount], Nothing)
 
--- TODO: add check for other Bridgewalker user
 sendPayment :: BridgewalkerHandles-> BridgewalkerAccount-> Integer-> RPC.BitcoinAddress-> AmountType-> UTCTime-> IO(PendingActionsStateModification, [BridgewalkerAccount], Maybe SendPaymentAnswer)
 sendPayment bwHandles account requestID address amountType expiration = do
     let logger = bhAppLogger bwHandles
@@ -273,22 +272,60 @@ sendPayment bwHandles account requestID address amountType expiration = do
                             }
             logger logMsg
             return (RemoveAction, [], Just answer)
-        Right _ ->
+        Right touchedAccounts ->
             let answer = SendPaymentSuccessful account requestID
-            in return (RemoveAction, [account], Just answer)
+            in return (RemoveAction, touchedAccounts, Just answer)
   where
     go = do
+            let dbConn = bhDBConnPAT bwHandles
             now <- liftIO getCurrentTime
             tryAssert busyMsg (now < expiration)
             quoteData <- sendPaymentPreparationChecks bwHandles account
                                                             address amountType
-            tryAssert busyMsg (now < expiration)    -- check again, as some
-                                                    -- previous checks might
-                                                    -- have blocked for a while
-            btcAmountToSend <- buyBTC bwHandles account quoteData
-            txID <- sendBTC bwHandles account address btcAmountToSend
-            return txID
+            tryAssert busyMsg (now < expiration) -- check again, as some
+                                                 -- previous checks might
+                                                 -- have blocked for a while
+            otherAccountM <- liftIO $ getAccountByAddress
+                                            dbConn (adjustAddr address)
+            case otherAccountM of
+                Just otherAccount -> do
+                    performInternalTransfer bwHandles account
+                                                otherAccount quoteData
+                    return [account, otherAccount]
+                Nothing -> do
+                    sendPaymentExternalPreparationChecks bwHandles quoteData
+                    tryAssert busyMsg (now < expiration) -- one final check
+                    btcAmountToSend <- buyBTC bwHandles account quoteData
+                    txID <- sendBTC bwHandles account address btcAmountToSend
+                    return [account]
     busyMsg = "The server is very busy at the moment. Please try again later."
+
+performInternalTransfer bwHandles bwAccount bwOtherAccount quoteData = do
+    let usdAmount = qdUSDRecipient quoteData
+        dbConn = bhDBConnPAT bwHandles
+        logger = bhAppLogger bwHandles
+        account = bAccount bwAccount
+        otherAccount = bAccount bwOtherAccount
+    usdBalance <- liftIO $ getUSDBalance dbConn account
+    otherUSDBalance <- liftIO $ getUSDBalance dbConn otherAccount
+    let newUSDBalance = usdBalance - usdAmount
+        otherNewUSDBalance = otherUSDBalance + usdAmount
+        info = "Transferred " ++ formatUSDAmount usdAmount ++ " USD"
+                ++ " directly from account " ++ show account
+                ++ " to account " ++ show otherAccount ++ "."
+        logMsg = InternalTransfer { lcAccount = account
+                                  , lcOtherAccount = otherAccount
+                                  , lcAmount = usdAmount
+                                  , lcInfo = info
+                                  }
+    liftIO $ logger logMsg
+    liftIO $ execute dbConn "update accounts set usd_balance=?\
+                            \ where account_nr=?"
+                            (newUSDBalance, account)
+    liftIO $ execute dbConn "update accounts set usd_balance=?\
+                            \ where account_nr=?"
+                            (otherNewUSDBalance, otherAccount)
+    return ()
 
 sendBTC :: BridgewalkerHandles-> BridgewalkerAccount-> RPC.BitcoinAddress-> Integer-> EitherT String IO RPC.TransactionID
 sendBTC bwHandles bwAccount address btcAmountToSend = do
@@ -420,10 +457,13 @@ sendPaymentPreparationChecks bwHandles account address amountType = do
                     DepthStoreWasUnavailable -> left mtgoxCommunicationErrorMsg
     tryAssert "Insufficient funds to complete the transaction." $
                     qdSufficientBalance quoteData
+    return quoteData
+
+sendPaymentExternalPreparationChecks bwHandles quoteData = do
     checkOrderRange quoteData bwHandles
     checkMtGoxWallet bwHandles (qdUSDAccount quoteData)
     checkBitcoindWallet bwHandles (qdBTC quoteData)
-    return quoteData
+    return ()
 
 checkOrderRange :: QuoteData -> BridgewalkerHandles -> EitherT String IO ()
 checkOrderRange quoteData bwHandles = do

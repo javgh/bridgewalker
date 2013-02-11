@@ -198,6 +198,11 @@ data LogContent = RebalancerFailure { lcInfo :: String }
                                          , lcAddress :: String
                                          , lcInfo :: String
                                          }
+                | InternalTransfer { lcAccount :: Integer
+                                   , lcOtherAccount :: Integer
+                                   , lcAmount :: Integer
+                                   , lcInfo :: String
+                                   }
                 | GuestAccountCreated { lcAccountName :: String }
                 | UserLoggedIn { lcAccount :: Integer }
                 | DisconnectedStaleClient
