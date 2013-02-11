@@ -65,16 +65,7 @@ data BridgewalkerAction = DepositAction { baAmount :: Integer
                                             , baAmountType :: AmountType
                                             , baExpiration :: UTCTime
                                             }
-                        | BuyBTCAction { baAmount :: Integer
-                                       , baAddress :: RPC.BitcoinAddress
-                                       , baAccount :: BridgewalkerAccount
-                                       }
-                        | SendBTCAction { baAmount :: Integer
-                                        , baAddress :: RPC.BitcoinAddress
-                                        , baAccount :: BridgewalkerAccount
-                                        }
                         | PauseAction { baExpiration :: UTCTime }
-                        -- TODO: more actions
                         deriving (Show, Generic)
 
 data ClientHubAnswer = ForwardStatusToClient ClientStatus
