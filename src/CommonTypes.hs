@@ -154,6 +154,9 @@ data LogContent = RebalancerFailure { lcInfo :: String }
                                    , lcInfo :: String
                                    }
                 | SystemDepositProcessed { lcInfo :: String }
+                | LargeDeposit { lcAccount :: Integer
+                               , lcInfo :: String
+                               }
                 | BTCSold { lcAccount :: Integer
                           , lcInfo :: String
                           }

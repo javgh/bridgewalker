@@ -177,11 +177,11 @@ processDeposit bwHandles amount address = do
                         (newBalance, account)
             let logMsg = DepositProcessed
                             { lcAccount = account
-                            , lcInfo = show amount
+                            , lcInfo = formatBTCAmount amount
                                         ++ " BTC deposited into account "
                                         ++ show account
                                         ++ " - balance is now "
-                                        ++ show newBalance ++ " BTC."
+                                        ++ formatBTCAmount newBalance ++ " BTC."
                             }
             logger logMsg                                                                   -- IO: Logger
             let bwAccount = BridgewalkerAccount account
@@ -197,10 +197,13 @@ sellBTC :: BridgewalkerHandles-> Integer-> BridgewalkerAccount-> IO (PendingActi
 sellBTC bwHandles amount bwAccount = do
     let mtgoxHandles = bhMtGoxHandles bwHandles
         safetyMarginBTC = bcSafetyMarginBTC . bhConfig $ bwHandles
+        maximalOrderBTC = bcMaximalOrderBTC . bhConfig $ bwHandles
         logger = bhAppLogger bwHandles
         dbConn = bhDBConnPAT bwHandles
         account = bAccount $ bwAccount
-    sell <- tryToExecuteSellOrder mtgoxHandles safetyMarginBTC amount                       -- IO: Mt.Gox
+        adjustedAmount = min maximalOrderBTC amount
+        remainingAmount = amount - adjustedAmount
+    sell <- tryToExecuteSellOrder mtgoxHandles safetyMarginBTC adjustedAmount               -- IO: Mt.Gox
     case sell of
         Left (MtGoxCallError msg) -> do
             let logMsg = MtGoxError
@@ -222,22 +225,38 @@ sellBTC bwHandles amount bwAccount = do
             let usdAmount = max 0 (usdEarned stats - usdFee stats)
             btcBalance <- getBTCInBalance dbConn account                                    -- IO: Database
             usdBalance <- getUSDBalance dbConn account                                      -- IO: Database
-            let newBTCBalance = max 0 (btcBalance - amount)
+            let newBTCBalance = max 0 (btcBalance - adjustedAmount)
                 newUSDBalance = usdBalance + usdAmount
             execute dbConn "update accounts set btc_in=?, usd_balance=?\
                                 \ where account_nr=?"
                                 (newBTCBalance, newUSDBalance, account)                     -- IO: Database
-            let logMsg = BTCSold
+            let info = formatBTCAmount adjustedAmount
+                            ++ " BTC sold on Mt.Gox and credited "
+                            ++ formatUSDAmount usdAmount ++ " USD to account "
+                            ++ show account ++ " - balance is now "
+                            ++ formatUSDAmount newUSDBalance ++ " USD and "
+                            ++ formatBTCAmount newBTCBalance ++ " BTC."
+                logMsg = BTCSold
                             { lcAccount = account
-                            , lcInfo = show amount
-                                        ++ " BTC sold on Mt.Gox and credited "
-                                        ++ show usdAmount ++ " USD to account "
-                                        ++ show account ++ " - balance is now "
-                                        ++ show newUSDBalance ++ " USD and "
-                                        ++ show newBTCBalance ++ " BTC."
+                            , lcInfo = info
                             }
             logger logMsg                                                                   -- IO: Logger
-            return (RemoveAction, [BridgewalkerAccount account], Nothing)
+            if remainingAmount == 0
+                then return (RemoveAction, [bwAccount], Nothing)
+                else do
+                    let action = SellBTCAction
+                                    { baAmount = remainingAmount
+                                    , baAccount = bwAccount
+                                    }
+                        info' = "Large deposit of "
+                                   ++ formatBTCAmount amount ++ " BTC"
+                                   ++ " to account " ++ show account
+                                   ++ " had to be split up."
+                        logMsg' = LargeDeposit { lcAccount = account
+                                               , lcInfo = info'
+                                               }
+                    logger logMsg'
+                    return (ReplaceAction action, [bwAccount], Nothing)
 
 -- TODO: add check for other Bridgewalker user
 sendPayment :: BridgewalkerHandles-> BridgewalkerAccount-> Integer-> RPC.BitcoinAddress-> AmountType-> UTCTime-> IO(PendingActionsStateModification, [BridgewalkerAccount], Maybe SendPaymentAnswer)
