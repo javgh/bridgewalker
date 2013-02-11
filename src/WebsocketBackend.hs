@@ -273,32 +273,29 @@ continueAuthenticated combinationChan sink chHandle account = forever $ do
                                 WSCommandNotAvailable "Command not available\
                                                       \ after login."
                  in WS.sendSink sink wsData
-        MessageFromClientHub msg -> case msg of
-            ForwardStatusToClient status ->
-                let wsData = WS.textData . prepareWSReply $ WSStatus status
-                in WS.sendSink sink wsData  -- TODO: check for exceptions
-                                            -- (or maybe already handled by Snap?)
-            ForwardQuoteToClient reqID Nothing ->
-                let wsData = WS.textData . prepareWSReply $
+        MessageFromClientHub msg ->
+            let wsData =
+                    case msg of
+                        ForwardStatusToClient status ->
+                            WS.textData . prepareWSReply $ WSStatus status
+                        ForwardQuoteToClient reqID Nothing ->
+                            WS.textData . prepareWSReply $
                                                 WSQuoteUnavailable reqID
-                in WS.sendSink sink wsData
-            ForwardQuoteToClient reqID (Just replyData) ->
-                let wsData = WS.textData . prepareWSReply $
-                                                WSQuote reqID replyData
-                in WS.sendSink sink wsData
-            ForwardSuccessfulSend reqID ->
-                let wsData = WS.textData . prepareWSReply $
-                                WSSendSuccessful reqID
-                in WS.sendSink sink wsData
-            ForwardFailedSend reqID reason ->
-                let wsData = WS.textData . prepareWSReply $
-                                WSSendFailed reqID reason
-                in WS.sendSink sink wsData
-            SendPongToClient ->
-                let wsData = WS.textData . prepareWSReply $ WSPong
-                in WS.sendSink sink wsData
-            CloseConnectionWithClient ->
-                WS.sendSink sink $ WS.close ("Timeout" :: T.Text)
+                        ForwardQuoteToClient reqID (Just replyData) ->
+                            WS.textData . prepareWSReply $
+                                               WSQuote reqID replyData
+                        ForwardSuccessfulSend reqID ->
+                            WS.textData . prepareWSReply $
+                               WSSendSuccessful reqID
+                        ForwardFailedSend reqID reason ->
+                            WS.textData . prepareWSReply $
+                               WSSendFailed reqID reason
+                        SendPongToClient ->
+                            WS.textData . prepareWSReply $ WSPong
+                        CloseConnectionWithClient ->
+                            WS.close ("Timeout" :: T.Text)
+            in WS.sendSink sink wsData  -- note: possible exceptions seem
+                                        -- seem to be handled by Snap
 
 createGuestAccount :: BridgewalkerHandles -> IO (T.Text, T.Text)
 createGuestAccount bwHandles = do
