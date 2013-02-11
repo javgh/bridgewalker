@@ -161,11 +161,3 @@ initBridgewalker = do
     bwHandles <- initBridgewalkerHandles myConnectInfo
     _ <- forkIO $ actOnDeposits bwHandles
     return bwHandles
-
--- TODO: Find bug - either: something related to standard transactions
---                      or: something related to marker transactions, that
---                            confirm while the application is not running
---                            (update: seems not to be the case)
---                      or: a combination of these (?)
---                      ---> try to design a unit test that involves shutting
---                      down and restarting from database after each step
