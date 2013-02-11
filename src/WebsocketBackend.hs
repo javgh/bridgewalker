@@ -96,6 +96,7 @@ instance FromJSON WebsocketCommand
             i <- o .: "request_id"
             t <- o .: "type" :: Parser T.Text
             a <- o .: "amount"
+            when (a < 0) mzero  -- only accept positive values
             case t of
                 "amount_based_on_btc" ->
                     return $ WSRequestQuote i (AmountBasedOnBTC a)
@@ -109,6 +110,7 @@ instance FromJSON WebsocketCommand
             addr <- o .: "address" :: Parser T.Text
             t <- o .: "type" :: Parser T.Text
             amount <- o .: "amount"
+            when (amount < 0) mzero  -- only accept positive values
             case t of
                 "amount_based_on_btc" ->
                     return $ WSSendPayment i addr (AmountBasedOnBTC amount)
