@@ -363,7 +363,29 @@ buyBTC' bwHandles bwAccount quoteData = do
                                         (newUSDBalance, account)
                 return btcAmount
             else do
-                undefined
+                let fractionPayed = fromIntegral usdBalance
+                                        / fromIntegral totalCost
+                    adjustedBtcAmount =
+                        floor $ fractionPayed * fromIntegral btcAmount
+                    info = "Account " ++ show account
+                            ++ " reached negative balance when paying "
+                            ++ formatUSDAmount totalCost ++ " USD for "
+                            ++ formatBTCAmount btcAmount ++ " BTC"
+                            ++ " - account has been set to zero and only "
+                            ++ formatBTCAmount adjustedBtcAmount ++ " BTC"
+                            ++ " will be payed out."
+                    logMsg' = AccountOverdrawn
+                                { lcAccount = account
+                                , lcAmount = totalCost
+                                , lcFractionPayed = fractionPayed
+                                , lcBTCPayedOut = adjustedBtcAmount
+                                , lcInfo = info
+                                }
+                liftIO $ logger logMsg'
+                liftIO $ execute dbConn "update accounts set usd_balance=?\
+                                        \ where account_nr=?"
+                                        (0 :: Integer, account)
+                return adjustedBtcAmount
     return btcAmountToSend
 
 determineExtraFees :: OrderStats -> Double -> Integer

@@ -177,6 +177,12 @@ data LogContent = RebalancerFailure { lcInfo :: String }
                                  , lcBalance :: Integer
                                  , lcInfo :: String
                                  }
+                | AccountOverdrawn { lcAccount :: Integer
+                                   , lcAmount :: Integer
+                                   , lcFractionPayed :: Double
+                                   , lcBTCPayedOut :: Integer
+                                   , lcInfo :: String
+                                   }
                 | MtGoxLowBTCBalance { lcInfo :: String }
                 | MtGoxError { lcInfo :: String }
                 | BitcoindLowBTCBalance { lcInfo :: String }
