@@ -1,5 +1,6 @@
 module PendingActionsTrackerQueueManagement
     ( addPendingActions
+    , putPendingActions
     , addPendingAction
     , putPendingAction
     , popPendingAction
@@ -23,9 +24,17 @@ nudgePendingActionsTracker (PendingActionsTrackerHandle chan) =
 -- for the PendingActionsTracker. Important: This must be part of a database
 -- transaction, so that reading and writing are one atomic operation.
 addPendingActions :: Connection -> [BridgewalkerAction] -> IO ()
-addPendingActions dbConn actions = do
+addPendingActions = modifyPendingActions addPendingAction
+
+-- | Similar to 'addPendingActions', but adds the actions to the front of the
+-- queue. Important: This must be part of a database transaction, so that
+-- reading and writing are one atomic operation.
+putPendingActions :: Connection -> [BridgewalkerAction] -> IO ()
+putPendingActions = modifyPendingActions putPendingAction
+
+modifyPendingActions f dbConn actions = do
     paState <- readPendingActionsStateFromDB dbConn
-    let paState' = foldl' addPendingAction paState actions
+    let paState' = foldl' f paState actions
     writePendingActionsStateToDB dbConn paState'
     print paState'
 
@@ -41,6 +50,7 @@ popPendingAction state =
                  in Just (action, state { pasSequence = as })
 
 -- | Add a new action to the front of the pending actions queue.
+putPendingAction :: PendingActionsState -> BridgewalkerAction -> PendingActionsState
 putPendingAction state action =
     let sequence = pasSequence state
     in state { pasSequence = action S.<| sequence }
