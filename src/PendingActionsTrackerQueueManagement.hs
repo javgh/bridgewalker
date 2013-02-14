@@ -20,8 +20,8 @@ nudgePendingActionsTracker (PendingActionsTrackerHandle chan) =
     writeChan chan ()
 
 -- | Will use the provided database connection to add new actions
--- for the PendingActionsTracker. This can be part of a larger
--- database transaction.
+-- for the PendingActionsTracker. Important: This must be part of a database
+-- transaction, so that reading and writing are one atomic operation.
 addPendingActions :: Connection -> [BridgewalkerAction] -> IO ()
 addPendingActions dbConn actions = do
     paState <- readPendingActionsStateFromDB dbConn

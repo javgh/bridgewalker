@@ -229,7 +229,7 @@ sendPaymentToPAT bwHandles account requestID address amountType = do
     expiration <- addUTCTime sendPaymentInterval <$> getCurrentTime
     let action = SendPaymentAction account requestID
                             (adjustAddr address) amountType expiration
-    addPendingActions dbConn [action]
+    withTransaction dbConn $ addPendingActions dbConn [action]
     nudgePendingActionsTracker patHandle
 
 sendClientStatus :: BridgewalkerHandles-> AccountCache-> ClientData-> IO ()
