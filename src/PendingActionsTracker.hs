@@ -159,7 +159,7 @@ processDeposit :: BridgewalkerHandles-> Integer -> RPC.BitcoinAddress -> IO (Pen
 processDeposit bwHandles amount address = do
     let dbConn = bhDBConnPAT bwHandles
         logger = bhAppLogger bwHandles
-        minimalOrderBTC = bcMtGoxMinimalOrderBTC . bhConfig $ bwHandles
+        minimumOrderBTC = bcMtGoxMinimumOrderBTC . bhConfig $ bwHandles
     putStrLn "[PAT] in processDeposit function"
     accountM <- getAccountByAddress dbConn (adjustAddr address)
     case accountM of
@@ -185,7 +185,7 @@ processDeposit bwHandles amount address = do
                             }
             logger logMsg
             let bwAccount = BridgewalkerAccount account
-            return $ if newBalance >= minimalOrderBTC
+            return $ if newBalance >= minimumOrderBTC
                         then let action = SellBTCAction
                                             { baAmount = newBalance
                                             , baAccount = bwAccount
@@ -468,12 +468,12 @@ sendPaymentExternalPreparationChecks bwHandles quoteData = do
 checkOrderRange :: QuoteData -> BridgewalkerHandles -> EitherT String IO ()
 checkOrderRange quoteData bwHandles = do
     let maximalOrderBTC = bcMaximalOrderBTC . bhConfig $ bwHandles
-        minimalOrderBTC = bcMtGoxMinimalOrderBTC . bhConfig $ bwHandles
-        minimalOrderBTCStr = formatBTCAmount minimalOrderBTC ++ " BTC"
+        minimumOrderBTC = bcMtGoxMinimumOrderBTC . bhConfig $ bwHandles
+        minimumOrderBTCStr = formatBTCAmount minimumOrderBTC ++ " BTC"
         maximalOrderBTCStr = formatBTCAmount maximalOrderBTC ++ " BTC"
         btcAmount = qdBTC quoteData
-    tryAssert ("Currently the minimal order size is "
-                ++ minimalOrderBTCStr ++ ".") $ btcAmount >= minimalOrderBTC
+    tryAssert ("Currently the minimum order size is "
+                ++ minimumOrderBTCStr ++ ".") $ btcAmount >= minimumOrderBTC
     tryAssert ("Currently the maximal order size is "
                 ++ maximalOrderBTCStr ++ ".") $ btcAmount <= maximalOrderBTC
 

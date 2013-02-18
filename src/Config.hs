@@ -30,7 +30,7 @@ data BridgewalkerConfig = BridgewalkerConfig
                             , bcSafetyMarginBTC :: !Integer
                             , bcSafetyMarginUSD :: !Integer
                             , bcMaximalOrderBTC :: !Integer
-                            , bcMtGoxMinimalOrderBTC :: !Integer
+                            , bcMtGoxMinimumOrderBTC :: !Integer
                             , bcTargetExchangeFee :: !Double
                             , bcNotifyFile :: !FilePath
                             , bcMarkerAddresses
@@ -74,7 +74,7 @@ readConfig = do
             safetyMarginBTCF <- get cp "DEFAULT" "safety_margin_btc"
             safetyMarginUSDF <- get cp "DEFAULT" "safety_margin_usd"
             maximalOrderBTCF <- get cp "DEFAULT" "maximal_order_btc"
-            mtgoxMinimalOrderBTCF <- get cp "DEFAULT" "mtgox_minimal_order_btc"
+            mtgoxMinimumOrderBTCF <- get cp "DEFAULT" "mtgox_minimum_order_btc"
             targetExchangeFee <- get cp "DEFAULT" "target_exchange_fee"
             notifyFile <- get cp "DEFAULT" "bitcoind_notify_file"
             markerAddresses <- get cp "DEFAULT" "marker_addresses"
@@ -88,8 +88,8 @@ readConfig = do
                     round $ (safetyMarginUSDF :: Double) * 10 ^ (5 :: Integer)
                 maximalOrderBTC =
                     round $ (maximalOrderBTCF :: Double) * 10 ^ (8 :: Integer)
-                mtgoxMinimalOrderBTC =
-                    round $ (mtgoxMinimalOrderBTCF :: Double)
+                mtgoxMinimumOrderBTC =
+                    round $ (mtgoxMinimumOrderBTCF :: Double)
                                 * 10 ^ (8 :: Integer)
             workingFund <- liftIO $ readTargetBalance
             case workingFund of
@@ -109,7 +109,7 @@ readConfig = do
                         , bcSafetyMarginBTC = safetyMarginBTC
                         , bcSafetyMarginUSD = safetyMarginUSD
                         , bcMaximalOrderBTC = maximalOrderBTC
-                        , bcMtGoxMinimalOrderBTC = mtgoxMinimalOrderBTC
+                        , bcMtGoxMinimumOrderBTC = mtgoxMinimumOrderBTC
                         , bcTargetExchangeFee = targetExchangeFee
                         , bcNotifyFile = notifyFile
                         , bcMarkerAddresses =
