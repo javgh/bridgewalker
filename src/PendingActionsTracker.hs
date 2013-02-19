@@ -306,6 +306,7 @@ performInternalTransfer bwHandles bwAccount bwOtherAccount quoteData = do
         logger = bhAppLogger bwHandles
         account = bAccount bwAccount
         otherAccount = bAccount bwOtherAccount
+    tryAssert "Sending to self seems unnecessary." (account /= otherAccount)
     usdBalance <- liftIO $ getUSDBalance dbConn account
     otherUSDBalance <- liftIO $ getUSDBalance dbConn otherAccount
     let newUSDBalance = usdBalance - usdAmount
@@ -321,10 +322,10 @@ performInternalTransfer bwHandles bwAccount bwOtherAccount quoteData = do
     liftIO $ logger logMsg
     liftIO $ execute dbConn "update accounts set usd_balance=?\
                             \ where account_nr=?"
-                            (newUSDBalance, account)
+                            (otherNewUSDBalance, otherAccount)
     liftIO $ execute dbConn "update accounts set usd_balance=?\
                             \ where account_nr=?"
-                            (otherNewUSDBalance, otherAccount)
+                            (newUSDBalance, account)
     return ()
 
 sendBTC :: BridgewalkerHandles-> BridgewalkerAccount-> RPC.BitcoinAddress-> Integer-> EitherT String IO RPC.TransactionID
