@@ -36,7 +36,6 @@ modifyPendingActions f dbConn actions = do
     paState <- readPendingActionsStateFromDB dbConn
     let paState' = foldl' f paState actions
     writePendingActionsStateToDB dbConn paState'
-    print paState'
 
 popPendingAction :: PendingActionsState-> Maybe (BridgewalkerAction, PendingActionsState)
 popPendingAction state =

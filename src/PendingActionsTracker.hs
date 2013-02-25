@@ -92,10 +92,8 @@ trackerLoop bwHandles chan =
         (touchedAccounts, sendPaymentAnswerM)
             <- withSerialTransaction dbLock dbConn $ do
                 paState <- readPendingActionsStateFromDB dbConn
-                putStrLn $ "[PAT] >>>>>>>> Before processing: " ++ show paState
                 (paState', keepGoing, touchedAccounts, sendPaymentAnswerM)
                     <- maybeProcessOneAction bwHandles paState
-                putStrLn $ "[PAT] >>>>>>>> After processing: " ++ show paState'
                 writePendingActionsStateToDB dbConn paState'
                 when keepGoing $ writeChan chan ()
                 return (touchedAccounts, sendPaymentAnswerM)
@@ -162,7 +160,6 @@ processDeposit bwHandles amount address = do
     let dbConn = bhDBConnPAT bwHandles
         logger = bhAppLogger bwHandles
         minimumOrderBTC = bcMtGoxMinimumOrderBTC . bhConfig $ bwHandles
-    putStrLn "[PAT] in processDeposit function"
     accountM <- getAccountByAddress dbConn (adjustAddr address)
     case accountM of
         Nothing -> do

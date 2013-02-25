@@ -127,11 +127,6 @@ tryToSellBtc mtgoxHandles safetyMargin amount = runEitherT $ do
             OrderTypeSellBTC (adjustAmount amount)
     return orderStats
 
-displayStats :: OrderStats -> IO ()
-displayStats stats =
-    let usd = fromIntegral (usdEarned stats) / (10 ^ (5 :: Integer))
-    in putStrLn $ "Account activity: + $" ++ show usd
-
 actOnDeposits :: BridgewalkerHandles -> IO ()
 actOnDeposits bwHandles = do
     let fbetHandle = bhFilteredBitcoinEventTaskHandle bwHandles
@@ -143,7 +138,6 @@ actOnDeposits bwHandles = do
     patHandle <- readMVar patHandleMVar
     forever $ do
         (fetState, fEvents) <- waitForFilteredBitcoinEvents fbetHandle
-        mapM_ print fEvents
         let actions = concatMap convertToActions fEvents
         withSerialTransaction dbLock dbConn $ do
                         -- atomic transaction: do not update fetState, before

@@ -48,7 +48,7 @@ logToFile logfile count logContent
         let entry = LogEntry now logContent
         hPutStrLn logfile $ show entry
         hFlush logfile      -- TODO: what is the performance impact of this?
-        print entry
+        putStrLn $ (show now) ++ "\t" ++ show logContent
         return (logfile, count + 1)
   | otherwise = do
         hClose logfile
