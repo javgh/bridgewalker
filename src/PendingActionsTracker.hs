@@ -85,18 +85,20 @@ initPendingActionsTracker bwHandles = do
 trackerLoop :: BridgewalkerHandles -> Chan () -> IO ()
 trackerLoop bwHandles chan =
     let dbConn = bhDBConnPAT bwHandles
+        dbLock = bhDBWriteLock bwHandles
         chHandle = bhClientHubHandle bwHandles
     in forever $ do
         _ <- readChan chan
-        (touchedAccounts, sendPaymentAnswerM) <- withTransaction dbConn $ do
-            paState <- readPendingActionsStateFromDB dbConn
-            putStrLn $ "[PAT] >>>>>>>> Before processing: " ++ show paState
-            (paState', keepGoing, touchedAccounts, sendPaymentAnswerM)
-                <- maybeProcessOneAction bwHandles paState
-            putStrLn $ "[PAT] >>>>>>>> After processing: " ++ show paState'
-            writePendingActionsStateToDB dbConn paState'
-            when keepGoing $ writeChan chan ()
-            return (touchedAccounts, sendPaymentAnswerM)
+        (touchedAccounts, sendPaymentAnswerM)
+            <- withSerialTransaction dbLock dbConn $ do
+                paState <- readPendingActionsStateFromDB dbConn
+                putStrLn $ "[PAT] >>>>>>>> Before processing: " ++ show paState
+                (paState', keepGoing, touchedAccounts, sendPaymentAnswerM)
+                    <- maybeProcessOneAction bwHandles paState
+                putStrLn $ "[PAT] >>>>>>>> After processing: " ++ show paState'
+                writePendingActionsStateToDB dbConn paState'
+                when keepGoing $ writeChan chan ()
+                return (touchedAccounts, sendPaymentAnswerM)
         case sendPaymentAnswerM of
             Nothing -> return ()
             Just (SendPaymentSuccessful account requestID) ->

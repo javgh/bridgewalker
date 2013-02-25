@@ -300,6 +300,7 @@ continueAuthenticated combinationChan sink chHandle account = forever $ do
 createGuestAccount :: BridgewalkerHandles -> IO (T.Text, T.Text)
 createGuestAccount bwHandles = do
     let dbConn = bhDBConnCH bwHandles
+        dbLock = bhDBWriteLock bwHandles
         watchdogLogger = bhWatchdogLogger bwHandles
         rpcAuth = bcRPCAuth . bhConfig $ bwHandles
         logger = bhAppLogger bwHandles
@@ -307,15 +308,17 @@ createGuestAccount bwHandles = do
     guestPw <- randomText guestPwLength
     pwHash <- makePassword (T.encodeUtf8 guestPw) passwordStoreStrength
     btcAddress <- RPC.getNewAddressR (Just watchdogLogger) rpcAuth
-    execute dbConn
-        "insert into accounts (btc_in, usd_balance, account_name, account_pw\
-            \, is_full_account, primary_btc_address)\
-            \ values (0, 0, ?, ?, false, ?)"
-            (guestName, pwHash, RPC.btcAddress btcAddress)
-    account <- getAccountNumber dbConn guestName
-    execute dbConn
-        "insert into addresses (account, btc_address) values (?, ?)"
-            (account, RPC.btcAddress btcAddress)
+    withSerialTransaction dbLock dbConn $ do
+        execute dbConn
+            "insert into accounts (btc_in, usd_balance\
+                \, account_name, account_pw\
+                \, is_full_account, primary_btc_address)\
+                \ values (0, 0, ?, ?, false, ?)"
+                (guestName, pwHash, RPC.btcAddress btcAddress)
+        account <- getAccountNumber dbConn guestName
+        execute dbConn
+            "insert into addresses (account, btc_address) values (?, ?)"
+                (account, RPC.btcAddress btcAddress)
     let logMsg = GuestAccountCreated (T.unpack guestName)
     logger logMsg
     return (guestName, guestPw)

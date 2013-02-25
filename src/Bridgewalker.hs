@@ -51,6 +51,7 @@ initBridgewalkerHandles connectInfo = do
     dbConn1 <- connectPostgreSQL connectInfo
     dbConn2 <- connectPostgreSQL connectInfo
     dbConn3 <- connectPostgreSQL connectInfo
+    dbWriteLock <- newMVar ()
     fetState <- readBitcoindStateFromDB dbConn1 >>= \s
                     -> return $ updateMarkerAddresses s maConfig
     let streamSettings = MtGoxStreamSettings
@@ -80,6 +81,7 @@ initBridgewalkerHandles connectInfo = do
                                 , bhDBConnPAT = dbConn1
                                 , bhDBConnCH = dbConn2
                                 , bhDBConnFBET = dbConn3
+                                , bhDBWriteLock = dbWriteLock
                                 , bhMtGoxHandles = mtgoxHandles
                                 , bhMtGoxFee = mtgoxFee
                                 , bhFilteredBitcoinEventTaskHandle = fbetHandle
@@ -108,9 +110,11 @@ justCatchUp :: BridgewalkerHandles -> IO ()
 justCatchUp bwHandles =
     let fbetHandle = bhFilteredBitcoinEventTaskHandle bwHandles
         dbConn = bhDBConnFBET bwHandles
+        dbLock = bhDBWriteLock bwHandles
     in forever $ do
         (fetState, _) <- waitForFilteredBitcoinEvents fbetHandle
-        writeBitcoindStateToDB dbConn fetState
+        withSerialTransaction dbLock dbConn $
+            writeBitcoindStateToDB dbConn fetState
 
 tryToSellBtc :: MtGoxAPIHandles -> Integer -> BitcoinAmount -> IO (Either String OrderStats)
 tryToSellBtc mtgoxHandles safetyMargin amount = runEitherT $ do
@@ -133,6 +137,7 @@ actOnDeposits bwHandles = do
     let fbetHandle = bhFilteredBitcoinEventTaskHandle bwHandles
         fetStateCopy = bhFilteredEventStateCopy bwHandles
         dbConn = bhDBConnFBET bwHandles
+        dbLock = bhDBWriteLock bwHandles
         patHandleMVar = bhPendingActionsTrackerHandleMVar bwHandles
         chHandle = bhClientHubHandle bwHandles
     patHandle <- readMVar patHandleMVar
@@ -140,9 +145,9 @@ actOnDeposits bwHandles = do
         (fetState, fEvents) <- waitForFilteredBitcoinEvents fbetHandle
         mapM_ print fEvents
         let actions = concatMap convertToActions fEvents
-        withTransaction dbConn $ do     -- atomic transaction: do not update
-                                        -- fetState, before recording necessary
-                                        -- actions to be done as a result
+        withSerialTransaction dbLock dbConn $ do
+                        -- atomic transaction: do not update fetState, before
+                        -- recording necessary actions to be done as a result
             addPendingActions dbConn actions
             writeBitcoindStateToDB dbConn fetState
             _ <- swapMVar fetStateCopy fetState

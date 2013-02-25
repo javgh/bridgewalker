@@ -45,6 +45,7 @@ data BridgewalkerHandles = BridgewalkerHandles
                             , bhDBConnPAT :: Connection
                             , bhDBConnCH :: Connection
                             , bhDBConnFBET :: Connection
+                            , bhDBWriteLock :: MVar ()
                             , bhMtGoxHandles :: MtGoxAPIHandles
                             , bhMtGoxFee :: Double
                             , bhFilteredBitcoinEventTaskHandle

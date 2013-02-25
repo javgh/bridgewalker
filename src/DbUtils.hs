@@ -12,9 +12,11 @@ module DbUtils
     , getAccountNumber
     , getAccountByAddress
     , debugConnection
+    , withSerialTransaction
     ) where
 
 import Control.Applicative
+import Control.Concurrent
 import Crypto.PasswordStore
 import Database.PostgreSQL.Simple
 import Data.Serialize
@@ -136,3 +138,10 @@ getAccountByAddress dbConn btcAddress = do
 expectOneRow :: String -> [a] -> a
 expectOneRow errMsg [] = error errMsg
 expectOneRow _ (x:_) = x
+
+withSerialTransaction ::  MVar () -> Connection -> IO b -> IO b
+withSerialTransaction dbWriteLock dbConn action = do
+    _ <- takeMVar dbWriteLock
+    r <- withTransaction dbConn action
+    putMVar dbWriteLock ()
+    return r

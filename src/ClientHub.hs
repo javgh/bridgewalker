@@ -224,12 +224,13 @@ signalFailedSend (ClientHubHandle chChan) account requestID reason = do
 
 sendPaymentToPAT bwHandles account requestID address amountType = do
     let dbConn = bhDBConnCH bwHandles
+        dbLock = bhDBWriteLock bwHandles
         patHandleMVar = bhPendingActionsTrackerHandleMVar bwHandles
     patHandle <- readMVar patHandleMVar
     expiration <- addUTCTime sendPaymentInterval <$> getCurrentTime
     let action = SendPaymentAction account requestID
                             (adjustAddr address) amountType expiration
-    withTransaction dbConn $ putPendingActions dbConn [action]
+    withSerialTransaction dbLock dbConn $ putPendingActions dbConn [action]
     nudgePendingActionsTracker patHandle
 
 sendClientStatus :: BridgewalkerHandles-> AccountCache-> ClientData-> IO ()
