@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+module Tools.CreateDB where
 
 import Database.PostgreSQL.Simple
 import Network.BitcoinRPC.Events.MarkerAddresses
@@ -16,15 +17,27 @@ createTableStates :: Connection -> IO ()
 createTableStates conn = do
     execute_ conn
         "create table states (key text primary key, state text)"
+    initializeFilteredEventTaskState conn
+    initializePendingActionsState conn
+    return ()
+
+initializeFilteredEventTaskState conn =
     let fetStateStr = B64.encode . encode $ initialFilteredEventTaskState
-    execute conn
+    in execute conn
         "insert into states values (?, ?)"
         ("filteredeventtaskstate" :: B.ByteString, fetStateStr)
+
+initializePendingActionsState conn =
     let paStateStr = B64.encode . encode $ initialPendingActionsState
-    execute conn
+    in execute conn
         "insert into states values (?, ?)"
         ("pendingactionsstate" :: B.ByteString, paStateStr)
-    return ()
+
+resetPendingActionsState conn =
+    let paStateStr = B64.encode . encode $ initialPendingActionsState
+    in execute conn
+        "update states set state=? where key=?"
+        (paStateStr, "pendingactionsstate" :: B.ByteString)
 
 createTableAccounts :: Connection -> IO ()
 createTableAccounts conn = do
