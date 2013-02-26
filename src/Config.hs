@@ -72,6 +72,7 @@ readConfig = do
 
             authKeyScrambled <- get cp "DEFAULT" "mtgox_auth_key"
             authSecretScrambled <- get cp "DEFAULT" "mtgox_auth_secret"
+            keySet <- get cp "DEFAULT" "key_set"
             safetyMarginBTCF <- get cp "DEFAULT" "safety_margin_btc"
             safetyMarginUSDF <- get cp "DEFAULT" "safety_margin_usd"
             maximalOrderBTCF <- get cp "DEFAULT" "maximal_order_btc"
@@ -80,9 +81,15 @@ readConfig = do
             notifyFile <- get cp "DEFAULT" "bitcoind_notify_file"
             markerAddresses <- get cp "DEFAULT" "marker_addresses"
             let authKey = B8.pack $
-                            unScrambleText authKeyScrambled hardcodedKeyA
+                            unScrambleText authKeyScrambled
+                                (case keySet :: Integer of
+                                    1 -> hardcodedKeyA
+                                    2 -> hardcodedKeyC)
                 authSecret = B8.pack $
-                                unScrambleText authSecretScrambled hardcodedKeyB
+                                unScrambleText authSecretScrambled
+                                    (case keySet :: Integer of
+                                        1 -> hardcodedKeyB
+                                        2 -> hardcodedKeyD)
                 safetyMarginBTC =
                     round $ (safetyMarginBTCF :: Double) * 10 ^ (8 :: Integer)
                 safetyMarginUSD =
