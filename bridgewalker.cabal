@@ -53,6 +53,7 @@ Executable bridgewalker
     random == 1.0.*,
     old-locale == 1.0.*,
     directory == 1.1.*,
+    regex-compat == 0.95.*,
     ghc-prim
 
 
