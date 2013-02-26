@@ -69,7 +69,7 @@ createTableAddresses conn = do
 
 main :: IO ()
 main = connectPostgreSQL myConnectInfo >>= \conn -> do
-    --createTableStates conn
+    createTableStates conn
     createTableAccounts conn
     createTableAddresses conn
     return ()
