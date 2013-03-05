@@ -19,6 +19,7 @@ import Control.Monad
 import Database.PostgreSQL.Simple
 import Data.Foldable(foldl',foldlM)
 import Data.IxSet((@<), (@>=), (@=))
+import Data.Maybe
 import Data.Time.Clock
 import Data.Typeable
 
@@ -100,7 +101,7 @@ clientHubLoop (ClientHubHandle chChan) bwHandles = do
             SendPayment account requestID address amountType -> do
                 sendPaymentToPAT bwHandles account requestID address amountType
                 go clientSet addressCache accountCache
-            ReceivedPing account -> do
+            ReceivedPing account ->
                 case I.getOne (clientSet @= account) of
                     Nothing -> go clientSet addressCache accountCache
                     Just client -> do
@@ -118,7 +119,7 @@ clientHubLoop (ClientHubHandle chChan) bwHandles = do
                 mapM_ (sendClientStatus bwHandles accountCache') affectedClients
                 go clientSet addressCache' accountCache'
             SignalAccountUpdates accounts -> do
-                forM_ accounts $ \account -> do
+                forM_ accounts $ \account ->
                     case I.getOne (clientSet @= account) of
                         Nothing -> return ()
                         Just client ->
@@ -175,9 +176,9 @@ addClient set account answerChan = do
 registerClientWithHub :: ClientHubHandle -> BridgewalkerAccount -> IO (Chan ClientHubAnswer)
 registerClientWithHub (ClientHubHandle chChan) account = do
     answerChan <- newChan
-    writeChan chChan $ RegisterClient { chcAccount = account
-                                      , chcAnswerChan = answerChan
-                                      }
+    writeChan chChan RegisterClient { chcAccount = account
+                                    , chcAnswerChan = answerChan
+                                    }
     return answerChan
 
 requestClientStatus :: ClientHubHandle -> BridgewalkerAccount -> IO ()
@@ -191,7 +192,7 @@ requestQuote (ClientHubHandle chChan) account requestID amountType = do
     return ()
 
 sendPayment :: ClientHubHandle -> BridgewalkerAccount -> Integer -> T.Text -> AmountType -> IO ()
-sendPayment (ClientHubHandle chChan) account requestID address amountType = do
+sendPayment (ClientHubHandle chChan) account requestID address amountType =
     writeChan chChan $ SendPayment account requestID address amountType
 
 receivedPing :: ClientHubHandle -> BridgewalkerAccount -> IO ()
@@ -201,7 +202,7 @@ receivedPing (ClientHubHandle chChan) account = do
 
 signalPossibleBitcoinEvents :: ClientHubHandle -> IO ()
 signalPossibleBitcoinEvents (ClientHubHandle chChan) = do
-    writeChan chChan $ SignalPossibleBitcoinEvents
+    writeChan chChan SignalPossibleBitcoinEvents
     return ()
 
 signalAccountUpdates :: ClientHubHandle -> [BridgewalkerAccount] -> IO ()
@@ -238,9 +239,7 @@ sendClientStatus bwHandles accountCache client = do
         answerChan = cdAnswerChan client
     (btcIn, usdBalance, primaryBTCAddress) <-
         getClientDBStatus dbConn (bAccount account)
-    let pendingTxs = case M.lookup account accountCache of
-                        Just vs -> vs
-                        Nothing -> []
+    let pendingTxs = fromMaybe [] $ M.lookup account accountCache
     let status = ClientStatus { csUSDBalance = usdBalance
                               , csBTCIn = btcIn
                               , csPrimaryBTCAddress = primaryBTCAddress
@@ -297,12 +296,12 @@ augmentPendingTxs :: Connection-> AddressCache -> ([(Maybe BridgewalkerAccount, 
 augmentPendingTxs dbConn addressCache (augPendingTxs, updatedAddressCache) pendingTx = do
     let addr = RPC.tAddress . fst $ pendingTx
     case M.lookup addr addressCache of
-        Just v -> return $ ((v, pendingTx) : augPendingTxs,
-                                M.insert addr v updatedAddressCache)
+        Just v -> return ((v, pendingTx) : augPendingTxs,
+                              M.insert addr v updatedAddressCache)
         Nothing -> do
             mAccount <- getAccountByAddress dbConn (adjustAddr addr)
-            return $ ((mAccount, pendingTx) : augPendingTxs,
-                        M.insert addr mAccount updatedAddressCache)
+            return ((mAccount, pendingTx) : augPendingTxs,
+                      M.insert addr mAccount updatedAddressCache)
 
 rebuildAccountCache :: AccountCache -> (Maybe BridgewalkerAccount, (RPC.Transaction, MA.PendingReason))-> AccountCache
 rebuildAccountCache accountCache augPendingTx =

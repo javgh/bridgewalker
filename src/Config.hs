@@ -60,7 +60,7 @@ data BridgewalkerHandles = BridgewalkerHandles
 getConfFile :: FilePath -> FilePath
 getConfFile home = home </> ".bridgewalker/config"
 
-readConfig :: IO (BridgewalkerConfig)
+readConfig :: IO BridgewalkerConfig
 readConfig = do
     confFile <- getConfFile <$> getEnv "HOME"
     v <- runErrorT $ do
@@ -101,7 +101,7 @@ readConfig = do
                 mtgoxMinimumOrderBTC =
                     round $ (mtgoxMinimumOrderBTCF :: Double)
                                 * 10 ^ (8 :: Integer)
-            workingFund <- liftIO $ readTargetBalance
+            workingFund <- liftIO readTargetBalance
             case workingFund of
                 Nothing ->
                     throwError (OtherProblem "Unable to read size\
@@ -112,19 +112,19 @@ readConfig = do
                                                  \ enough to deal with\
                                                  \ largest possible order."
                                                  , "")
-            return $ BridgewalkerConfig
-                        { bcRPCAuth = rpcAuth
-                        , bcMtGoxCredentials =
-                            initMtGoxCredentials authKey authSecret
-                        , bcSafetyMarginBTC = safetyMarginBTC
-                        , bcSafetyMarginUSD = safetyMarginUSD
-                        , bcMaximalOrderBTC = maximalOrderBTC
-                        , bcMtGoxMinimumOrderBTC = mtgoxMinimumOrderBTC
-                        , bcTargetExchangeFee = targetExchangeFee
-                        , bcNotifyFile = notifyFile
-                        , bcMarkerAddresses =
-                            adjustMarkerAddresses (read markerAddresses)
-                        }
+            return BridgewalkerConfig
+                      { bcRPCAuth = rpcAuth
+                      , bcMtGoxCredentials =
+                          initMtGoxCredentials authKey authSecret
+                      , bcSafetyMarginBTC = safetyMarginBTC
+                      , bcSafetyMarginUSD = safetyMarginUSD
+                      , bcMaximalOrderBTC = maximalOrderBTC
+                      , bcMtGoxMinimumOrderBTC = mtgoxMinimumOrderBTC
+                      , bcTargetExchangeFee = targetExchangeFee
+                      , bcNotifyFile = notifyFile
+                      , bcMarkerAddresses =
+                          adjustMarkerAddresses (read markerAddresses)
+                      }
     case v of
         Left msg -> error $ "Reading the configuration failed " ++ show msg
         Right cfg -> return cfg

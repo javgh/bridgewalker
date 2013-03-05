@@ -11,6 +11,7 @@ module Rebalancer
 import Control.Applicative
 import Control.Concurrent
 import Control.Error
+import Control.Monad
 import Control.Monad.IO.Class
 import Data.Time
 import Network.BitcoinRPC
@@ -78,15 +79,13 @@ runRebalancer :: RebalancerHandle -> IO ()
 runRebalancer rbHandle = do
     rd <- readMVar (unRH rbHandle)
     hAR <- hasActedRecently (rbTimestamp rd)
-    if hAR
-        then return ()
-        else do
-            rlog <- runRebalancer' (rbAppLogger rd) (rbWatchdogLogger rd)
-                                     (rbRPCAuth rd) (rbMtGoxAPIHandles rd)
-                                     (rbSafetyMargin rd)
-            case rlog of
-                Just (WillRebalance _) -> updateTimestamp
-                _ -> return ()
+    unless hAR $ do
+        rlog <- runRebalancer' (rbAppLogger rd) (rbWatchdogLogger rd)
+                                 (rbRPCAuth rd) (rbMtGoxAPIHandles rd)
+                                 (rbSafetyMargin rd)
+        case rlog of
+            Just (WillRebalance _) -> updateTimestamp
+            _ -> return ()
   where
     updateTimestamp = do
         newTimestamp <- Just <$> getCurrentTime

@@ -32,7 +32,7 @@ compileQuote bwHandles account amountType = do
                         DepthStoreAnswer usdAmountSell) ->
                             let usdAmountBuyWithFee =
                                     addFee usdAmountBuy actualFee
-                            in SuccessfulQuote $
+                            in SuccessfulQuote
                                 QuoteData { qdBTC = btc
                                           , qdUSDRecipient = usdAmountSell
                                           , qdUSDAccount = usdAmountBuyWithFee
@@ -51,7 +51,7 @@ compileQuote bwHandles account amountType = do
                                 DepthStoreAnswer usdAmountNeeded ->
                                     let usdAmountWithFee =
                                             addFee usdAmountNeeded actualFee
-                                    in SuccessfulQuote $
+                                    in SuccessfulQuote
                                         QuoteData { qdBTC = btcAmount
                                                   , qdUSDRecipient = usd
                                                   , qdUSDAccount =
@@ -74,7 +74,7 @@ compileQuote bwHandles account amountType = do
                        simulateBTCSell depthStoreHandle btcAmount
                    return $ case usdAmountRecipientM of
                                 DepthStoreAnswer usdAmountRecipient ->
-                                    SuccessfulQuote $
+                                    SuccessfulQuote
                                         QuoteData { qdBTC = btcAmount
                                                   , qdUSDRecipient =
                                                      usdAmountRecipient

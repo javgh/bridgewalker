@@ -52,7 +52,7 @@ writeBitcoindStateToDB conn fetState = do
     writeStateToDB conn "filteredeventtaskstate" fetStateStr
     return ()
 
-readBitcoindStateFromDB :: Connection -> IO (FilteredEventTaskState)
+readBitcoindStateFromDB :: Connection -> IO FilteredEventTaskState
 readBitcoindStateFromDB conn = do
     fetStateStr <- readStateFromDB conn "filteredeventtaskstate"
     let fetState = B64.decode fetStateStr >>= decode
@@ -64,7 +64,7 @@ writePendingActionsStateToDB conn paState = do
     writeStateToDB conn "pendingactionsstate" paStateStr
     return ()
 
-readPendingActionsStateFromDB :: Connection -> IO (PendingActionsState)
+readPendingActionsStateFromDB :: Connection -> IO PendingActionsState
 readPendingActionsStateFromDB conn = do
     paStateStr <- readStateFromDB conn "pendingactionsstate"
     let paState = B64.decode paStateStr >>= decode
@@ -96,10 +96,9 @@ getClientDBStatus :: Connection -> Integer -> IO (Integer, Integer, T.Text)
 getClientDBStatus dbConn account = do
     let errMsg = "Expected to find account " ++ show account
                     ++ " while doing getClientDBStatus, but failed."
-    status <- expectOneRow errMsg <$>
+    expectOneRow errMsg <$>
         query dbConn "select btc_in, usd_balance, primary_btc_address\
                         \ from accounts where account_nr=?" (Only account)
-    return status
 
 checkGuestNameExists :: Connection -> T.Text -> IO Bool
 checkGuestNameExists dbConn guestName = do

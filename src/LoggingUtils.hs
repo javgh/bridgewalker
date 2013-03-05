@@ -46,9 +46,9 @@ logToFile logfile count logContent
   | count < linesPerFile = do
         now <- getCurrentTime
         let entry = LogEntry now logContent
-        hPutStrLn logfile $ show entry
+        hPrint logfile entry
         hFlush logfile      -- TODO: what is the performance impact of this?
-        putStrLn $ (show now) ++ "\t" ++ show logContent
+        putStrLn $ show now ++ "\t" ++ show logContent
         return (logfile, count + 1)
   | otherwise = do
         hClose logfile
@@ -58,7 +58,7 @@ logToFile logfile count logContent
 openLogfile :: IO Handle
 openLogfile = do
     exists <- doesDirectoryExist logDirectory
-    when (not exists) $
+    unless exists $
         error "Logging error: log directory not found"
     timestamp <- formatTime defaultTimeLocale "%F_%H_%M_%S" <$> getCurrentTime
     let logfile = logDirectory </> logName ++ "." ++ timestamp ++ ".log"

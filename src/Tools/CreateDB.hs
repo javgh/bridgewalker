@@ -24,23 +24,23 @@ createTableStates conn = do
 initializeFilteredEventTaskState :: Connection -> IO ()
 initializeFilteredEventTaskState conn =
     let fetStateStr = B64.encode . encode $ initialFilteredEventTaskState
-    in execute conn
-        "insert into states values (?, ?)"
-        ("filteredeventtaskstate" :: B.ByteString, fetStateStr) >> return ()
+    in void $ execute conn
+                "insert into states values (?, ?)"
+                ("filteredeventtaskstate" :: B.ByteString, fetStateStr)
 
 initializePendingActionsState :: Connection -> IO ()
 initializePendingActionsState conn =
     let paStateStr = B64.encode . encode $ initialPendingActionsState
-    in execute conn
-        "insert into states values (?, ?)"
-        ("pendingactionsstate" :: B.ByteString, paStateStr) >> return ()
+    in void $ execute conn
+                "insert into states values (?, ?)"
+                ("pendingactionsstate" :: B.ByteString, paStateStr)
 
 resetPendingActionsState :: Connection -> IO ()
 resetPendingActionsState conn =
     let paStateStr = B64.encode . encode $ initialPendingActionsState
-    in execute conn
-        "update states set state=? where key=?"
-        (paStateStr, "pendingactionsstate" :: B.ByteString) >> return ()
+    in void $ execute conn
+                "update states set state=? where key=?"
+                (paStateStr, "pendingactionsstate" :: B.ByteString)
 
 createTableAccounts :: Connection -> IO ()
 createTableAccounts conn = do

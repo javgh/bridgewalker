@@ -195,11 +195,11 @@ processDeposit bwHandles amount address = do
 sellBTC :: BridgewalkerHandles-> Integer-> BridgewalkerAccount-> IO (PendingActionsStateModification, [BridgewalkerAccount], Maybe SendPaymentAnswer)
 sellBTC bwHandles amount bwAccount = do
     let mtgoxHandles = bhMtGoxHandles bwHandles
+        logger = bhAppLogger bwHandles
         safetyMarginBTC = bcSafetyMarginBTC . bhConfig $ bwHandles
         maximalOrderBTC = bcMaximalOrderBTC . bhConfig $ bwHandles
-        logger = bhAppLogger bwHandles
         dbConn = bhDBConnPAT bwHandles
-        account = bAccount $ bwAccount
+        account = bAccount bwAccount
         adjustedAmount = min maximalOrderBTC amount
         remainingAmount = amount - adjustedAmount
     sell <- tryToExecuteSellOrder mtgoxHandles safetyMarginBTC adjustedAmount
@@ -320,12 +320,12 @@ performInternalTransfer bwHandles bwAccount bwOtherAccount quoteData = do
                                   , lcInfo = info
                                   }
     liftIO $ logger logMsg
-    liftIO $ execute dbConn "update accounts set usd_balance=?\
-                            \ where account_nr=?"
-                            (otherNewUSDBalance, otherAccount) >> return ()
-    liftIO $ execute dbConn "update accounts set usd_balance=?\
-                            \ where account_nr=?"
-                            (newUSDBalance, account) >> return ()
+    liftIO . void $ execute dbConn "update accounts set usd_balance=?\
+                                   \ where account_nr=?"
+                                   (otherNewUSDBalance, otherAccount)
+    liftIO . void $ execute dbConn "update accounts set usd_balance=?\
+                                   \ where account_nr=?"
+                                   (newUSDBalance, account)
     return ()
 
 sendBTC :: BridgewalkerHandles-> BridgewalkerAccount-> RPC.BitcoinAddress-> Integer-> EitherT String IO RPC.TransactionID
@@ -396,50 +396,48 @@ buyBTC bwHandles bwAccount quoteData = do
     liftIO $ logger logMsg
     usdBalance <- liftIO $ getUSDBalance dbConn account
     let newUSDBalance = usdBalance - totalCost
-    btcAmountToSend
-        <- if newUSDBalance >= 0
-            then do
-                let info = "Account " ++ show account ++ " debited "
-                            ++ formatUSDAmount totalCost ++ " USD for buying "
-                            ++ formatBTCAmount btcAmount ++ " BTC"
-                            ++ " - new balance is "
-                            ++ formatUSDAmount newUSDBalance ++ " USD."
-                    logMsg' = AccountDebited
-                                { lcAccount = account
-                                , lcAmount = totalCost
-                                , lcBalance = newUSDBalance
-                                , lcInfo = info
-                                }
-                liftIO $ logger logMsg'
-                liftIO $ execute dbConn "update accounts set usd_balance=?\
-                                        \ where account_nr=?"
-                                        (newUSDBalance, account) >> return ()
-                return btcAmount
-            else do
-                let fractionPayed = fromIntegral usdBalance
-                                        / fromIntegral totalCost
-                    adjustedBtcAmount =
-                        floor $ fractionPayed * fromIntegral btcAmount
-                    info = "Account " ++ show account
-                            ++ " reached negative balance when paying "
-                            ++ formatUSDAmount totalCost ++ " USD for "
-                            ++ formatBTCAmount btcAmount ++ " BTC"
-                            ++ " - account has been set to zero and only "
-                            ++ formatBTCAmount adjustedBtcAmount ++ " BTC"
-                            ++ " will be payed out."
-                    logMsg' = AccountOverdrawn
-                                { lcAccount = account
-                                , lcAmount = totalCost
-                                , lcFractionPayed = fractionPayed
-                                , lcBTCPayedOut = adjustedBtcAmount
-                                , lcInfo = info
-                                }
-                liftIO $ logger logMsg'
-                liftIO $ execute dbConn "update accounts set usd_balance=?\
-                                        \ where account_nr=?"
-                                        (0 :: Integer, account) >> return ()
-                return adjustedBtcAmount
-    return btcAmountToSend
+    if newUSDBalance >= 0
+        then do
+            let info = "Account " ++ show account ++ " debited "
+                        ++ formatUSDAmount totalCost ++ " USD for buying "
+                        ++ formatBTCAmount btcAmount ++ " BTC"
+                        ++ " - new balance is "
+                        ++ formatUSDAmount newUSDBalance ++ " USD."
+                logMsg' = AccountDebited
+                            { lcAccount = account
+                            , lcAmount = totalCost
+                            , lcBalance = newUSDBalance
+                            , lcInfo = info
+                            }
+            liftIO $ logger logMsg'
+            liftIO . void $ execute dbConn "update accounts set usd_balance=?\
+                                           \ where account_nr=?"
+                                           (newUSDBalance, account)
+            return btcAmount
+        else do
+            let fractionPayed = fromIntegral usdBalance
+                                    / fromIntegral totalCost
+                adjustedBtcAmount =
+                    floor $ fractionPayed * fromIntegral btcAmount
+                info = "Account " ++ show account
+                        ++ " reached negative balance when paying "
+                        ++ formatUSDAmount totalCost ++ " USD for "
+                        ++ formatBTCAmount btcAmount ++ " BTC"
+                        ++ " - account has been set to zero and only "
+                        ++ formatBTCAmount adjustedBtcAmount ++ " BTC"
+                        ++ " will be payed out."
+                logMsg' = AccountOverdrawn
+                            { lcAccount = account
+                            , lcAmount = totalCost
+                            , lcFractionPayed = fractionPayed
+                            , lcBTCPayedOut = adjustedBtcAmount
+                            , lcInfo = info
+                            }
+            liftIO $ logger logMsg'
+            liftIO . void $ execute dbConn "update accounts set usd_balance=?\
+                                           \ where account_nr=?"
+                                           (0 :: Integer, account)
+            return adjustedBtcAmount
 
 determineExtraFees :: OrderStats -> Double -> Integer
 determineExtraFees orderStats targetFee =
@@ -531,10 +529,9 @@ tryToExecuteSellOrder mtgoxHandles safetyMarginBTC amount = runEitherT $ do
                     . MaybeT $ callHTTPApi mtgoxHandles getPrivateInfoR
     _ <- tryAssert MtGoxLowBalance
             (piBtcBalance privateInfo >= amount + safetyMarginBTC)
-    orderStats <- EitherT $
-        adjustMtGoxError <$> callHTTPApi mtgoxHandles submitOrder
-                                OrderTypeSellBTC amount
-    return orderStats
+    EitherT $ adjustMtGoxError <$> callHTTPApi mtgoxHandles submitOrder
+                                                    OrderTypeSellBTC amount
+    -- returns order stats
 
 adjustMtGoxError :: Either String b -> Either SellOrderProblem b
 adjustMtGoxError (Left mtgoxErr) = Left (MtGoxCallError mtgoxErr)

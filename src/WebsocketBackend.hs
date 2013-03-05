@@ -234,8 +234,7 @@ processMessages bwHandles = do
                         _ <- liftIO . forkIO $ forwardClientHubAnswers
                                                     answerChan combinationChan
                         processMessagesAuthenticated combinationChan
-            _ -> do
-                WS.sendTextData . prepareWSReply $ WSNeedToBeAuthenticated
+            _ -> WS.sendTextData . prepareWSReply $ WSNeedToBeAuthenticated
 
 processMessagesAuthenticated :: WS.TextProtocol p => Chan AuthenticatedEvent -> WS.WebSockets p b
 processMessagesAuthenticated combinationChan = forever $ do
