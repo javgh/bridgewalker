@@ -43,7 +43,7 @@ readStateFromDB conn key = do
 
 writeStateToDB :: Connection -> B.ByteString -> B.ByteString -> IO ()
 writeStateToDB conn key stateStr = do
-    execute conn "update states set state=? where key=?" (stateStr, key)
+    _ <- execute conn "update states set state=? where key=?" (stateStr, key)
     return ()
 
 writeBitcoindStateToDB :: Connection -> FilteredEventTaskState -> IO ()

@@ -1,6 +1,7 @@
 -- This module is necessary to avoid cyclic imports in some cases.
 -- Unfortunately it leaks more than is necessary.
 {-# LANGUAGE DeriveGeneric, OverloadedStrings, DeriveDataTypeable, TemplateHaskell #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 module CommonTypes
     ( PendingActionsTrackerHandle(..)
     , PendingActionsState(..)

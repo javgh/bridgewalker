@@ -25,7 +25,8 @@ unScrambleText (c:cs) (k:ks)
     | c == '0' = asChar k : unScrambleText cs ks
     | otherwise = c : unScrambleText cs (k : ks)
   where
-    asChar k = head . show . round $ fromIntegral k / 42
+    asChar k' = head . show .
+                    (round :: Double -> Integer) $ fromIntegral k' / 42
 
 hardcodedKeyA :: [Integer]
 hardcodedKeyA = [210,378,84,336,252,336,210,168,0,336,336,42,336,84,210,126]

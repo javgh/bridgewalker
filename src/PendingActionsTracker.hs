@@ -12,7 +12,6 @@ import Control.Error
 import Control.Monad
 import Control.Monad.IO.Class
 import Database.PostgreSQL.Simple
-import Data.List
 import Data.Time.Clock
 import Network.MtGoxAPI
 import Text.Printf
@@ -26,7 +25,6 @@ import AddressUtils
 import CommonTypes
 import Config
 import DbUtils
-import LoggingUtils
 import PendingActionsTrackerQueueManagement
 import QuoteUtils
 
@@ -35,8 +33,10 @@ import qualified ClientHub as CH
 pauseInterval :: NominalDiffTime
 pauseInterval = 60  -- pauses are 60 seconds long
 
+mtgoxCommunicationErrorMsg :: String
 mtgoxCommunicationErrorMsg = "Currently unable to communicate with Mt.Gox."
 
+fatalSendPaymentError :: String
 fatalSendPaymentError = "An untimely error has left your account in an\
                         \ inconsistent state. Please contact support.\
                         \ Sorry for the inconvenience!"
@@ -48,25 +48,25 @@ data PendingActionsStateModification = RemoveAction
                                      | AddPauseAction String
                                         -- parameter describes reason for pause
 
-data WithdrawalType = WithdrawBTC { wtAmount :: Integer }
-                    | WithdrawUSD { wtAmount :: Integer }
+data WithdrawalType = WithdrawBTC { _wtAmount :: Integer }
+                    | WithdrawUSD { _wtAmount :: Integer }
                     deriving (Show)
 
-data WithdrawalAction = WithdrawalAction { waAddress :: RPC.BitcoinAddress
-                                         , waType :: WithdrawalType
+data WithdrawalAction = WithdrawalAction { _waAddress :: RPC.BitcoinAddress
+                                         , _waType :: WithdrawalType
                                          }
                         deriving (Show)
 
 data SellOrderProblem = MtGoxLowBalance | MtGoxCallError String
 
 data SendPaymentAnswer = SendPaymentSuccessful
-                            { spaAccount :: BridgewalkerAccount
-                            , spaRequestID :: Integer
+                            { _spaAccount :: BridgewalkerAccount
+                            , _spaRequestID :: Integer
                             }
                        | SendPaymentFailed
-                            { spaAccount :: BridgewalkerAccount
-                            , spaRequestID :: Integer
-                            , spaReason :: T.Text
+                            { _spaAccount :: BridgewalkerAccount
+                            , _spaRequestID :: Integer
+                            , _spaReason :: T.Text
                             }
 
 initialPendingActionsState :: PendingActionsState
@@ -77,7 +77,7 @@ initialPendingActionsState = PendingActionsState { pasSequence = S.empty
 initPendingActionsTracker :: BridgewalkerHandles -> IO PendingActionsTrackerHandle
 initPendingActionsTracker bwHandles = do
     chan <- newChan
-    forkIO $ trackerLoop bwHandles chan
+    _ <- forkIO $ trackerLoop bwHandles chan
     let handle = PendingActionsTrackerHandle chan
     nudgePendingActionsTracker handle
     return handle
@@ -171,7 +171,7 @@ processDeposit bwHandles amount address = do
         Just (BridgewalkerAccount account) -> do
             btcBalance <- getBTCInBalance dbConn account
             let newBalance = btcBalance + amount
-            execute dbConn
+            _ <- execute dbConn
                         "update accounts set btc_in=? where account_nr=?"
                         (newBalance, account)
             let logMsg = DepositProcessed
@@ -226,7 +226,7 @@ sellBTC bwHandles amount bwAccount = do
             usdBalance <- getUSDBalance dbConn account
             let newBTCBalance = max 0 (btcBalance - adjustedAmount)
                 newUSDBalance = usdBalance + usdAmount
-            execute dbConn "update accounts set btc_in=?, usd_balance=?\
+            _ <- execute dbConn "update accounts set btc_in=?, usd_balance=?\
                                 \ where account_nr=?"
                                 (newBTCBalance, newUSDBalance, account)
             let info = formatBTCAmount adjustedAmount
@@ -295,10 +295,11 @@ sendPayment bwHandles account requestID address amountType expiration = do
                     sendPaymentExternalPreparationChecks bwHandles quoteData
                     tryAssert busyMsg (now < expiration) -- one final check
                     btcAmountToSend <- buyBTC bwHandles account quoteData
-                    txID <- sendBTC bwHandles account address btcAmountToSend
+                    _ <- sendBTC bwHandles account address btcAmountToSend
                     return [account]
     busyMsg = "The server is very busy at the moment. Please try again later."
 
+performInternalTransfer :: BridgewalkerHandles-> BridgewalkerAccount-> BridgewalkerAccount-> QuoteData-> EitherT String IO ()
 performInternalTransfer bwHandles bwAccount bwOtherAccount quoteData = do
     let usdAmount = qdUSDRecipient quoteData
         dbConn = bhDBConnPAT bwHandles
@@ -321,10 +322,10 @@ performInternalTransfer bwHandles bwAccount bwOtherAccount quoteData = do
     liftIO $ logger logMsg
     liftIO $ execute dbConn "update accounts set usd_balance=?\
                             \ where account_nr=?"
-                            (otherNewUSDBalance, otherAccount)
+                            (otherNewUSDBalance, otherAccount) >> return ()
     liftIO $ execute dbConn "update accounts set usd_balance=?\
                             \ where account_nr=?"
-                            (newUSDBalance, account)
+                            (newUSDBalance, account) >> return ()
     return ()
 
 sendBTC :: BridgewalkerHandles-> BridgewalkerAccount-> RPC.BitcoinAddress-> Integer-> EitherT String IO RPC.TransactionID
@@ -376,8 +377,8 @@ buyBTC bwHandles bwAccount quoteData = do
     mtgoxOrder <- liftIO $ callHTTPApi mtgoxHandles submitOrder
                                             OrderTypeBuyBTC btcAmount
     orderStats <- case mtgoxOrder of
-                    Left err -> do
-                        let logMsg = MtGoxError err
+                    Left orderErr -> do
+                        let logMsg = MtGoxError orderErr
                         liftIO $ logger logMsg
                         left mtgoxCommunicationErrorMsg
                     Right stats -> return stats
@@ -412,7 +413,7 @@ buyBTC bwHandles bwAccount quoteData = do
                 liftIO $ logger logMsg'
                 liftIO $ execute dbConn "update accounts set usd_balance=?\
                                         \ where account_nr=?"
-                                        (newUSDBalance, account)
+                                        (newUSDBalance, account) >> return ()
                 return btcAmount
             else do
                 let fractionPayed = fromIntegral usdBalance
@@ -436,7 +437,7 @@ buyBTC bwHandles bwAccount quoteData = do
                 liftIO $ logger logMsg'
                 liftIO $ execute dbConn "update accounts set usd_balance=?\
                                         \ where account_nr=?"
-                                        (0 :: Integer, account)
+                                        (0 :: Integer, account) >> return ()
                 return adjustedBtcAmount
     return btcAmountToSend
 
@@ -449,7 +450,7 @@ determineExtraFees orderStats targetFee =
 
 sendPaymentPreparationChecks :: BridgewalkerHandles-> BridgewalkerAccount-> RPC.BitcoinAddress-> AmountType-> EitherT String IO QuoteData
 sendPaymentPreparationChecks bwHandles account address amountType = do
-    validatedAddress <- checkAddress bwHandles address
+    _ <- checkAddress bwHandles address
     qc <- liftIO $ compileQuote bwHandles account amountType
     quoteData <- case qc of
                     SuccessfulQuote qd -> return qd
@@ -459,6 +460,7 @@ sendPaymentPreparationChecks bwHandles account address amountType = do
                     qdSufficientBalance quoteData
     return quoteData
 
+sendPaymentExternalPreparationChecks :: BridgewalkerHandles -> QuoteData -> EitherT String IO ()
 sendPaymentExternalPreparationChecks bwHandles quoteData = do
     checkOrderRange quoteData bwHandles
     checkMtGoxWallet bwHandles (qdUSDAccount quoteData)
@@ -534,5 +536,6 @@ tryToExecuteSellOrder mtgoxHandles safetyMarginBTC amount = runEitherT $ do
                                 OrderTypeSellBTC amount
     return orderStats
 
-adjustMtGoxError (Left err) = Left (MtGoxCallError err)
+adjustMtGoxError :: Either String b -> Either SellOrderProblem b
+adjustMtGoxError (Left mtgoxErr) = Left (MtGoxCallError mtgoxErr)
 adjustMtGoxError (Right result) = Right result

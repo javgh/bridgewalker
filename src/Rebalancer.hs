@@ -12,7 +12,6 @@ import Control.Applicative
 import Control.Concurrent
 import Control.Error
 import Control.Monad.IO.Class
-import Data.Maybe
 import Data.Time
 import Network.BitcoinRPC
 import Network.MtGoxAPI
@@ -22,12 +21,12 @@ import System.FilePath
 import qualified Control.Exception as E
 
 import AddressUtils
-import LoggingUtils
 import CommonTypes
 
 smallestCoin :: Integer
 smallestCoin = 1000000
 
+timeBetweenActions :: NominalDiffTime
 timeBetweenActions = 60     -- minimum time between rebalancer actions
 
 data RebalancerLog = NothingDoTo
@@ -56,6 +55,7 @@ tryIO' = E.try
 maybeRead :: String -> Maybe Double
 maybeRead = fmap fst . listToMaybe . reads
 
+getConfFile :: FilePath -> FilePath
 getConfFile home = home </> ".bridgewalker/workingfund"
 
 readTargetBalance :: IO (Maybe Integer)
@@ -81,10 +81,10 @@ runRebalancer rbHandle = do
     if hAR
         then return ()
         else do
-            log <- runRebalancer' (rbAppLogger rd) (rbWatchdogLogger rd)
-                                    (rbRPCAuth rd) (rbMtGoxAPIHandles rd)
-                                    (rbSafetyMargin rd)
-            case log of
+            rlog <- runRebalancer' (rbAppLogger rd) (rbWatchdogLogger rd)
+                                     (rbRPCAuth rd) (rbMtGoxAPIHandles rd)
+                                     (rbSafetyMargin rd)
+            case rlog of
                 Just (WillRebalance _) -> updateTimestamp
                 _ -> return ()
   where
@@ -117,8 +117,8 @@ runRebalancer' appLogger mLogger rpcAuth mtgoxHandles safetyMargin = do
                                                \ fulfilled; returning early."
                    in appLogger msg >> return Nothing
         Just (tB, zCB, eCB, mB) -> do
-            let (log, action) = decideRebalance tB zCB eCB mB safetyMargin
-            case log of
+            let (rlog, action) = decideRebalance tB zCB eCB mB safetyMargin
+            case rlog of
                 NothingDoTo -> return ()
                 WillRebalance level ->
                     let msg = RebalancerStatus level True $
@@ -134,7 +134,7 @@ runRebalancer' appLogger mLogger rpcAuth mtgoxHandles safetyMargin = do
                 DoNothing -> return ()
                 MtGoxToBitcoind v -> mtgoxToBitcoind v
                 BitcoindToMtGox v -> bitcoindToMtgox v
-            return $ Just log
+            return $ Just rlog
   where
     mtgoxToBitcoind v = do
         addr <- adjustAddr <$> getNewAddressR Nothing rpcAuth
@@ -171,8 +171,6 @@ decideRebalance targetBalance zeroConfBalance enoughConfBalance mtgoxBalance saf
                      in decideTransfer diffLevel transfer
   where
     decideTransfer diffLevel transfer
-      | transfer == 0 = (NothingDoTo, DoNothing)    -- shouldn't really end up here,
-                                                    -- but just for completeness
       | transfer > 0 =
         let transfer' = min (enoughConfBalance - safetyMargin) transfer
         in if transfer' >= smallestCoin
@@ -183,6 +181,8 @@ decideRebalance targetBalance zeroConfBalance enoughConfBalance mtgoxBalance saf
         in if transfer' >= smallestCoin
             then (WillRebalance diffLevel, MtGoxToBitcoind transfer')
             else (UnableToRebalance diffLevel, DoNothing)
+      | otherwise = (NothingDoTo, DoNothing)    -- shouldn't really end up here,
+                                                -- but just for completeness
 
 findStepSize :: Integer -> Maybe Integer
 findStepSize targetBalance =

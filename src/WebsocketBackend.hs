@@ -5,15 +5,12 @@ module WebsocketBackend
 
 import Control.Applicative
 import Control.Concurrent
-import Control.Exception (fromException)
 import Control.Monad
 import Control.Monad.IO.Class (liftIO)
 import Crypto.PasswordStore
 import Data.Aeson
 import Data.Aeson.Types
 import Database.PostgreSQL.Simple
-import Data.Char (isPunctuation, isSpace)
-import Data.Monoid (mappend)
 import System.Random
 
 import qualified Data.Attoparsec as AP
@@ -23,7 +20,6 @@ import qualified Data.ByteString.Lazy as BL
 import qualified Data.HashMap.Strict as H
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
-import qualified Data.Text.IO as T
 import qualified Network.BitcoinRPC as RPC
 import qualified Network.WebSockets as WS
 
@@ -31,7 +27,6 @@ import ClientHub
 import CommonTypes
 import Config
 import DbUtils
-import LoggingUtils
 
 bridgewalkerServerVersion :: T.Text
 bridgewalkerServerVersion = "0.1"
@@ -48,40 +43,40 @@ guestPwLength = 25
 passwordStoreStrength :: Int
 passwordStoreStrength = 15
 
-data WebsocketCommand = WSRequestVersion { wcClientVersion :: T.Text }
+data WebsocketCommand = WSRequestVersion { _wcClientVersion :: T.Text }
                       | WSCreateGuestAccount
-                      | WSLogin { wcAccountName :: T.Text
-                                , wcAccountPassword :: T.Text
+                      | WSLogin { _wcAccountName :: T.Text
+                                , _wcAccountPassword :: T.Text
                                 }
                       | WSRequestStatus
-                      | WSRequestQuote { wcRequestID :: Integer
-                                       , wcAmountType :: AmountType
+                      | WSRequestQuote { _wcRequestID :: Integer
+                                       , _wcAmountType :: AmountType
                                        }
-                      | WSSendPayment { wcRequestID :: Integer
-                                      , wcAddress :: T.Text
-                                      , wcAmountType :: AmountType
+                      | WSSendPayment { _wcRequestID :: Integer
+                                      , _wcAddress :: T.Text
+                                      , _wcAmountType :: AmountType
                                       }
                       | WSPing
                       deriving (Show)
 
-data WebsocketReply = WSStatus { wrStatus :: ClientStatus }
-                    | WSCommandNotUnderstood { wrInfo :: T.Text }
-                    | WSCommandNotAvailable { wrInfo :: T.Text }
+data WebsocketReply = WSStatus { _wrStatus :: ClientStatus }
+                    | WSCommandNotUnderstood { _wrInfo :: T.Text }
+                    | WSCommandNotAvailable { _wrInfo :: T.Text }
                     | WSNeedToBeAuthenticated
-                    | WSServerVersion { wrServerVersion :: T.Text }
-                    | WSGuestAccountCreated { wrAccountName :: T.Text
-                                            , wrAccountPassword :: T.Text
+                    | WSServerVersion { _wrServerVersion :: T.Text }
+                    | WSGuestAccountCreated { _wrAccountName :: T.Text
+                                            , _wrAccountPassword :: T.Text
                                             }
                     | WSLoginSuccessful
-                    | WSLoginFailed { wrReason :: T.Text }
-                    | WSQuoteUnavailable { wrRequestID :: Integer }
-                    | WSQuote { wrRequestID :: Integer
-                              , wrQuote :: QuoteData
+                    | WSLoginFailed { _wrReason :: T.Text }
+                    | WSQuoteUnavailable { _wrRequestID :: Integer }
+                    | WSQuote { _wrRequestID :: Integer
+                              , _wrQuote :: QuoteData
                               }
-                    | WSSendFailed { wrRequestID :: Integer
-                                   , wrReason :: T.Text
+                    | WSSendFailed { _wrRequestID :: Integer
+                                   , _wrReason :: T.Text
                                    }
-                    | WSSendSuccessful { wrRequestID :: Integer }
+                    | WSSendSuccessful { _wrRequestID :: Integer }
                     | WSPong
                     deriving (Show)
 
@@ -191,8 +186,8 @@ prepareWSReply = T.decodeUtf8 . toStrict . encode
 
 parseWSCommand :: FromJSON b => T.Text -> Either String b
 parseWSCommand cmd =
-    let parse = AP.parseOnly (fromJSON <$> json) $ T.encodeUtf8 cmd
-    in case parse of
+    let cmdParse = AP.parseOnly (fromJSON <$> json) $ T.encodeUtf8 cmd
+    in case cmdParse of
         Left _ -> Left "Malformed JSON"
         Right (Error _) -> Left "Malformed command"
         Right (Success d) -> Right d
@@ -207,7 +202,6 @@ processMessages bwHandles = do
     let dbConn = bhDBConnCH bwHandles
         chHandle = bhClientHubHandle bwHandles
     msg <- WS.receiveData
-    let cmd = parseWSCommand msg :: Either String WebsocketCommand
     case parseWSCommand msg of
         Left errMsg ->
             WS.sendTextData . prepareWSReply $
@@ -246,7 +240,6 @@ processMessages bwHandles = do
 processMessagesAuthenticated :: WS.TextProtocol p => Chan AuthenticatedEvent -> WS.WebSockets p b
 processMessagesAuthenticated combinationChan = forever $ do
     msg <- WS.receiveData
-    let cmd = parseWSCommand msg :: Either String WebsocketCommand
     case parseWSCommand msg of
         Left errMsg ->
             WS.sendTextData . prepareWSReply $
@@ -308,17 +301,18 @@ createGuestAccount bwHandles = do
     guestPw <- randomText guestPwLength
     pwHash <- makePassword (T.encodeUtf8 guestPw) passwordStoreStrength
     btcAddress <- RPC.getNewAddressR (Just watchdogLogger) rpcAuth
-    withSerialTransaction dbLock dbConn $ do
-        execute dbConn
-            "insert into accounts (btc_in, usd_balance\
-                \, account_name, account_pw\
-                \, is_full_account, primary_btc_address)\
-                \ values (0, 0, ?, ?, false, ?)"
-                (guestName, pwHash, RPC.btcAddress btcAddress)
-        account <- getAccountNumber dbConn guestName
-        execute dbConn
-            "insert into addresses (account, btc_address) values (?, ?)"
-                (account, RPC.btcAddress btcAddress)
+    _ <- withSerialTransaction dbLock dbConn $ do
+            _ <- execute dbConn
+                    "insert into accounts (btc_in, usd_balance\
+                        \, account_name, account_pw\
+                        \, is_full_account, primary_btc_address)\
+                        \ values (0, 0, ?, ?, false, ?)"
+                        (guestName, pwHash, RPC.btcAddress btcAddress)
+            account <- getAccountNumber dbConn guestName
+            execute dbConn
+                "insert into addresses (account, btc_address)\
+                    \ values (?, ?)"
+                    (account, RPC.btcAddress btcAddress)
     let logMsg = GuestAccountCreated (T.unpack guestName)
     logger logMsg
     return (guestName, guestPw)

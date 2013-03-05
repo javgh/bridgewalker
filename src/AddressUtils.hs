@@ -1,6 +1,7 @@
 module AddressUtils
     ( adjustAddr
     , adjustAmount
+    , IsBitcoinAddress
     ) where
 
 import qualified Data.Text as T

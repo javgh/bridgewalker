@@ -16,13 +16,11 @@ module ClientHub
 import Control.Applicative
 import Control.Concurrent
 import Control.Monad
-import Data.Aeson
 import Database.PostgreSQL.Simple
 import Data.Foldable(foldl',foldlM)
 import Data.IxSet((@<), (@>=), (@=))
 import Data.Time.Clock
 import Data.Typeable
-import Network.MtGoxAPI
 
 import qualified Data.IxSet as I
 import qualified Data.Map as M
@@ -34,11 +32,8 @@ import AddressUtils
 import CommonTypes
 import Config
 import DbUtils
-import LoggingUtils
 import PendingActionsTrackerQueueManagement
 import QuoteUtils
-
-magicAddress = RPC.BitcoinAddress "1KmWJbRo4sjcQBFZN83KExVjBxTNxST6fL"
 
 timeoutInSeconds :: Int
 timeoutInSeconds = 30
@@ -123,7 +118,7 @@ clientHubLoop (ClientHubHandle chChan) bwHandles = do
                 mapM_ (sendClientStatus bwHandles accountCache') affectedClients
                 go clientSet addressCache' accountCache'
             SignalAccountUpdates accounts -> do
-                forM accounts $ \account -> do
+                forM_ accounts $ \account -> do
                     case I.getOne (clientSet @= account) of
                         Nothing -> return ()
                         Just client ->
@@ -214,14 +209,17 @@ signalAccountUpdates (ClientHubHandle chChan) accounts = do
     writeChan chChan $ SignalAccountUpdates accounts
     return ()
 
+signalSuccessfulSend :: ClientHubHandle -> BridgewalkerAccount -> Integer -> IO ()
 signalSuccessfulSend (ClientHubHandle chChan) account requestID = do
     writeChan chChan $ SignalSuccessfulSend account requestID
     return ()
 
+signalFailedSend :: ClientHubHandle-> BridgewalkerAccount -> Integer -> T.Text -> IO ()
 signalFailedSend (ClientHubHandle chChan) account requestID reason = do
     writeChan chChan $ SignalFailedSend account requestID reason
     return ()
 
+sendPaymentToPAT :: IsBitcoinAddress a =>BridgewalkerHandles-> BridgewalkerAccount -> Integer -> a -> AmountType -> IO ()
 sendPaymentToPAT bwHandles account requestID address amountType = do
     let dbConn = bhDBConnCH bwHandles
         dbLock = bhDBWriteLock bwHandles

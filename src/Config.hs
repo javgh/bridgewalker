@@ -20,7 +20,6 @@ import qualified Data.ByteString.Char8 as B8
 import qualified Data.Text as T
 
 import CommonTypes
-import LoggingUtils
 import Rebalancer
 import ScrambleCredentials
 
@@ -58,6 +57,7 @@ data BridgewalkerHandles = BridgewalkerHandles
                                 :: MVar PendingActionsTrackerHandle
                             }
 
+getConfFile :: FilePath -> FilePath
 getConfFile home = home </> ".bridgewalker/config"
 
 readConfig :: IO (BridgewalkerConfig)
@@ -84,12 +84,14 @@ readConfig = do
                             unScrambleText authKeyScrambled
                                 (case keySet :: Integer of
                                     1 -> hardcodedKeyA
-                                    2 -> hardcodedKeyC)
+                                    2 -> hardcodedKeyC
+                                    _ -> error "Unknown keyset")
                 authSecret = B8.pack $
                                 unScrambleText authSecretScrambled
                                     (case keySet :: Integer of
                                         1 -> hardcodedKeyB
-                                        2 -> hardcodedKeyD)
+                                        2 -> hardcodedKeyD
+                                        _ -> error "Unknown keyset")
                 safetyMarginBTC =
                     round $ (safetyMarginBTCF :: Double) * 10 ^ (8 :: Integer)
                 safetyMarginUSD =

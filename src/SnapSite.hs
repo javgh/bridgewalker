@@ -20,7 +20,6 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Network.WebSockets as WS
 import qualified Network.WebSockets.Snap as WS
-import qualified Text.XmlHtml as X
 
 import CommonTypes
 import Config

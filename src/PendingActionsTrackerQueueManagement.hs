@@ -32,6 +32,7 @@ addPendingActions = modifyPendingActions addPendingAction
 putPendingActions :: Connection -> [BridgewalkerAction] -> IO ()
 putPendingActions = modifyPendingActions putPendingAction
 
+modifyPendingActions :: (PendingActionsState -> BridgewalkerAction -> PendingActionsState)-> Connection -> [BridgewalkerAction] -> IO ()
 modifyPendingActions f dbConn actions = do
     paState <- readPendingActionsStateFromDB dbConn
     let paState' = foldl' f paState actions
@@ -39,10 +40,10 @@ modifyPendingActions f dbConn actions = do
 
 popPendingAction :: PendingActionsState-> Maybe (BridgewalkerAction, PendingActionsState)
 popPendingAction state =
-    let sequence = pasSequence state
-    in if S.null sequence
+    let pseq = pasSequence state
+    in if S.null pseq
             then Nothing
-            else let (a, as) = S.splitAt 1 sequence
+            else let (a, as) = S.splitAt 1 pseq
                      action = S.index a 0   -- should always succeed as
                                             -- we checked that the sequence
                                             -- is not empty
@@ -51,11 +52,11 @@ popPendingAction state =
 -- | Add a new action to the front of the pending actions queue.
 putPendingAction :: PendingActionsState -> BridgewalkerAction -> PendingActionsState
 putPendingAction state action =
-    let sequence = pasSequence state
-    in state { pasSequence = action S.<| sequence }
+    let pseq = pasSequence state
+    in state { pasSequence = action S.<| pseq }
 
 -- | Add a new action to the end of the pending actions queue.
 addPendingAction :: PendingActionsState-> BridgewalkerAction -> PendingActionsState
 addPendingAction state action =
-    let sequence = pasSequence state
-    in state { pasSequence = sequence S.|> action }
+    let pseq = pasSequence state
+    in state { pasSequence = pseq S.|> action }

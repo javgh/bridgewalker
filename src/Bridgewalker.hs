@@ -3,18 +3,14 @@ module Bridgewalker
     ( initBridgewalker
     ) where
 
-import Control.Applicative
 import Control.Concurrent
-import Control.Error
 import Control.Monad
 import Database.PostgreSQL.Simple
-import Data.Serialize
 import Network.BitcoinRPC
 import Network.BitcoinRPC.Events.MarkerAddresses
 import Network.MtGoxAPI
 
 import qualified Data.ByteString as B
-import qualified Data.ByteString.Base64 as B64
 
 import AddressUtils
 import ClientHub
@@ -30,6 +26,7 @@ import qualified CommonTypes as CT
 myConnectInfo :: B.ByteString
 myConnectInfo = "dbname=bridgewalker"
 
+acceptAfterThreeConfs :: TransactionHeader -> Bool
 acceptAfterThreeConfs txHeader = thConfirmations txHeader >= 3
 
 periodicRebalancing :: RebalancerHandle -> IO ()
@@ -106,26 +103,15 @@ initBridgewalkerHandles connectInfo = do
                         { lcInfo = formatWatchdogError taskErr delay }
         in logger logMsg
 
-justCatchUp :: BridgewalkerHandles -> IO ()
-justCatchUp bwHandles =
-    let fbetHandle = bhFilteredBitcoinEventTaskHandle bwHandles
-        dbConn = bhDBConnFBET bwHandles
-        dbLock = bhDBWriteLock bwHandles
-    in forever $ do
-        (fetState, _) <- waitForFilteredBitcoinEvents fbetHandle
-        withSerialTransaction dbLock dbConn $
-            writeBitcoindStateToDB dbConn fetState
-
-tryToSellBtc :: MtGoxAPIHandles -> Integer -> BitcoinAmount -> IO (Either String OrderStats)
-tryToSellBtc mtgoxHandles safetyMargin amount = runEitherT $ do
-    privateInfo <- noteT "Unable to call getPrivateInfoR"
-                    . MaybeT $ callHTTPApi mtgoxHandles getPrivateInfoR
-    _ <- tryAssert "Not enough funds available at MtGox to sell BTC"
-            (piBtcBalance privateInfo >= adjustAmount amount + safetyMargin)
-    orderStats <- EitherT $
-        callHTTPApi mtgoxHandles submitOrder
-            OrderTypeSellBTC (adjustAmount amount)
-    return orderStats
+--justCatchUp :: BridgewalkerHandles -> IO ()
+--justCatchUp bwHandles =
+--    let fbetHandle = bhFilteredBitcoinEventTaskHandle bwHandles
+--        dbConn = bhDBConnFBET bwHandles
+--        dbLock = bhDBWriteLock bwHandles
+--    in forever $ do
+--        (fetState, _) <- waitForFilteredBitcoinEvents fbetHandle
+--        withSerialTransaction dbLock dbConn $
+--            writeBitcoindStateToDB dbConn fetState
 
 actOnDeposits :: BridgewalkerHandles -> IO ()
 actOnDeposits bwHandles = do
