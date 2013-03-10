@@ -28,7 +28,7 @@ smallestCoin :: Integer
 smallestCoin = 1000000
 
 timeBetweenActions :: NominalDiffTime
-timeBetweenActions = 60     -- minimum time between rebalancer actions
+timeBetweenActions = 5 * 60     -- minimum time between rebalancer actions
 
 data RebalancerLog = NothingDoTo
                    | WillRebalance Integer
