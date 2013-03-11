@@ -22,6 +22,7 @@ import Data.IxSet((@<), (@>=), (@=))
 import Data.Maybe
 import Data.Time.Clock
 import Data.Typeable
+import Network.MtGoxAPI
 
 import qualified Data.IxSet as I
 import qualified Data.Map as M
@@ -38,6 +39,9 @@ import QuoteUtils
 
 timeoutInSeconds :: Int
 timeoutInSeconds = 30
+
+exchangeCheckInterval :: Int
+exchangeCheckInterval = 60  -- seconds
 
 sendPaymentInterval :: NominalDiffTime
 sendPaymentInterval = 10    -- SendPayment commands have to be executed
@@ -70,71 +74,77 @@ initClientHub bwHandles = do
     handle <- ClientHubHandle <$> newChan
     _ <- forkIO $ clientHubLoop handle bwHandles
     _ <- forkIO $ periodicTimeoutCheck handle
+    _ <- forkIO $ periodicExchangeCheck handle bwHandles
     return handle
 
 clientHubLoop ::  ClientHubHandle -> BridgewalkerHandles -> IO ()
 clientHubLoop (ClientHubHandle chChan) bwHandles = do
     (accountCache, addressCache) <-
         updatePendingInfos bwHandles M.empty
-    go I.empty addressCache accountCache
+    go I.empty addressCache accountCache False
   where
-    go clientSet addressCache accountCache = do
+    go clientSet addressCache accountCache exchangeAvailable = do
         let logger = bhAppLogger bwHandles
         msg <- readChan chChan
         case msg of
             RegisterClient account answerChan -> do
                 clientSet' <- addClient clientSet account answerChan
                 logger $ UserLoggedIn (bAccount account)
-                go clientSet' addressCache accountCache
+                go clientSet' addressCache accountCache exchangeAvailable
             RequestClientStatus account -> do
                 case I.getOne (clientSet @= account) of
                     Nothing -> return ()
                     Just client ->
-                        sendClientStatus bwHandles accountCache client
-                go clientSet addressCache accountCache
+                        sendClientStatus bwHandles
+                            accountCache exchangeAvailable client
+                go clientSet addressCache accountCache exchangeAvailable
             RequestQuote account requestID amountType -> do
                 case I.getOne (clientSet @= account) of
                     Nothing -> return ()
                     Just client ->
                         sendQuote bwHandles client account requestID amountType
-                go clientSet addressCache accountCache
+                go clientSet addressCache accountCache exchangeAvailable
             SendPayment account requestID address amountType -> do
                 sendPaymentToPAT bwHandles account requestID address amountType
-                go clientSet addressCache accountCache
+                go clientSet addressCache accountCache exchangeAvailable
             ReceivedPing account ->
                 case I.getOne (clientSet @= account) of
-                    Nothing -> go clientSet addressCache accountCache
+                    Nothing -> go clientSet addressCache
+                                    accountCache exchangeAvailable
                     Just client -> do
                         now <- getCurrentTime
                         let client' = client { cdLastKeepAlive = now }
                             clientSet' = I.updateIx account client' clientSet
                         sendPong client
-                        go clientSet' addressCache accountCache
+                        go clientSet' addressCache
+                                accountCache exchangeAvailable
             SignalPossibleBitcoinEvents -> do
                 (accountCache', addressCache') <-
                     updatePendingInfos bwHandles addressCache
                 let affectedClients =
                         findAffectedClients (I.toList clientSet) accountCache
                                                                    accountCache'
-                mapM_ (sendClientStatus bwHandles accountCache') affectedClients
-                go clientSet addressCache' accountCache'
+                mapM_ (sendClientStatus bwHandles
+                            accountCache' exchangeAvailable) affectedClients
+                go clientSet addressCache' accountCache' exchangeAvailable
             SignalAccountUpdates accounts -> do
                 forM_ accounts $ \account ->
                     case I.getOne (clientSet @= account) of
                         Nothing -> return ()
                         Just client ->
-                            sendClientStatus bwHandles accountCache client
-                go clientSet addressCache accountCache
+                            sendClientStatus bwHandles
+                                    accountCache exchangeAvailable client
+                go clientSet addressCache accountCache exchangeAvailable
             SignalFailedSend account requestID reason -> do
                 case I.getOne (clientSet @= account) of
                     Nothing -> return ()
                     Just client -> sendFailedSend client requestID reason
-                go clientSet addressCache accountCache
+                go clientSet addressCache accountCache exchangeAvailable
             SignalSuccessfulSend account requestID -> do
                 case I.getOne (clientSet @= account) of
                     Nothing -> return ()
                     Just client -> sendSuccessfulSend client requestID
-                go clientSet addressCache accountCache
+                go clientSet addressCache accountCache exchangeAvailable
             CheckTimeouts -> do
                 now <- getCurrentTime
                 let cutoff = addUTCTime (-1 * fromIntegral timeoutInSeconds) now
@@ -142,7 +152,8 @@ clientHubLoop (ClientHubHandle chChan) bwHandles = do
                 -- touching the datastructure
                 let staleClients = clientSet @< cutoff
                 if I.null staleClients
-                    then go clientSet addressCache accountCache
+                    then go clientSet addressCache
+                                accountCache exchangeAvailable
                     else do
                         mapM_ closeConnection $ I.toList staleClients
                         let clientSet' = clientSet @>= cutoff
@@ -160,13 +171,37 @@ clientHubLoop (ClientHubHandle chChan) bwHandles = do
                                         ++ " client(s) remaining online."
                                     }
                         logger logMsg
-                        go clientSet' addressCache accountCache
+                        go clientSet' addressCache
+                                accountCache exchangeAvailable
+            ExchangeAvailable -> do
+                unless exchangeAvailable $
+                    -- exchange has just become available; inform all clients
+                    forM_ (I.toList clientSet) $
+                        sendClientStatus bwHandles accountCache True
+                go clientSet addressCache accountCache True
+            ExchangeUnavailable -> do
+                when exchangeAvailable $
+                    -- exchange has just become unavailable; inform all clients
+                    forM_ (I.toList clientSet) $
+                        sendClientStatus bwHandles accountCache False
+                go clientSet addressCache accountCache False
 
-periodicTimeoutCheck :: ClientHubHandle -> IO b
+periodicTimeoutCheck :: ClientHubHandle -> IO ()
 periodicTimeoutCheck (ClientHubHandle chChan) =
     forever $ do
         threadDelay $ timeoutInSeconds * 1000 * 1000
         writeChan chChan CheckTimeouts
+
+periodicExchangeCheck :: ClientHubHandle -> BridgewalkerHandles -> IO ()
+periodicExchangeCheck (ClientHubHandle chChan) bwHandles =
+    let depthStoreHandle = mtgoxDepthStoreHandle . bhMtGoxHandles $ bwHandles
+        testAmount = 1 * 10 ^ (8 :: Integer)
+    in forever $ do
+        answer <- simulateBTCBuy depthStoreHandle testAmount
+        writeChan chChan $ case answer of
+                            DepthStoreAnswer _ -> ExchangeAvailable
+                            _ -> ExchangeUnavailable
+        threadDelay $ exchangeCheckInterval * 1000 * 1000
 
 addClient :: I.IxSet ClientData-> BridgewalkerAccount-> Chan ClientHubAnswer-> IO (I.IxSet ClientData)
 addClient set account answerChan = do
@@ -232,8 +267,8 @@ sendPaymentToPAT bwHandles account requestID address amountType = do
     withSerialTransaction dbLock dbConn $ putPendingActions dbConn [action]
     nudgePendingActionsTracker patHandle
 
-sendClientStatus :: BridgewalkerHandles-> AccountCache-> ClientData-> IO ()
-sendClientStatus bwHandles accountCache client = do
+sendClientStatus :: BridgewalkerHandles-> AccountCache-> Bool-> ClientData-> IO ()
+sendClientStatus bwHandles accountCache exchangeAvailable client = do
     let dbConn = bhDBConnCH bwHandles
         account = cdAccount client
         answerChan = cdAnswerChan client
@@ -244,6 +279,7 @@ sendClientStatus bwHandles accountCache client = do
                               , csBTCIn = btcIn
                               , csPrimaryBTCAddress = primaryBTCAddress
                               , csPendingTxs = pendingTxs
+                              , csExchangeAvailable = exchangeAvailable
                               }
     writeChan answerChan $ ForwardStatusToClient status
 

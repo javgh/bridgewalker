@@ -92,6 +92,8 @@ data ClientHubCommand = RegisterClient { chcAccount :: BridgewalkerAccount
                                     }
                       | ReceivedPing { chcAccount :: BridgewalkerAccount }
                       | CheckTimeouts
+                      | ExchangeAvailable
+                      | ExchangeUnavailable
                       | SignalPossibleBitcoinEvents
                       | SignalAccountUpdates { chcAccounts ::
                                                     [BridgewalkerAccount] }
@@ -111,6 +113,7 @@ data ClientStatus = ClientStatus { csUSDBalance :: Integer
                                  , csBTCIn :: Integer
                                  , csPrimaryBTCAddress :: T.Text
                                  , csPendingTxs :: [ClientPendingTransaction]
+                                 , csExchangeAvailable :: Bool
                                  }
                     deriving (Show)
 
@@ -248,10 +251,12 @@ instance ToJSON ClientStatus where
             btcIn = csBTCIn cs
             pendingTxs = csPendingTxs cs
             primaryBTCAddress = csPrimaryBTCAddress cs
+            exchangeAvailable = csExchangeAvailable cs
         in object [ "usd_balance" .= usdBalance
                   , "btc_in" .= btcIn
                   , "primary_btc_address" .= primaryBTCAddress
                   , "pending_txs" .= pendingTxs
+                  , "exchange_available" .= exchangeAvailable
                   ]
 
 instance Serialize Day where
