@@ -19,6 +19,7 @@ module CommonTypes
     , LogContent(..)
     , LogEntry(..)
     , QuoteData(..)
+    , ExchangeStatus(..)
     , AmountType(..)
     , confsNeededForSending
     , SnapApp(..)
@@ -76,6 +77,9 @@ data ClientHubAnswer = ForwardStatusToClient ClientStatus
                      | SendPongToClient
                      | CloseConnectionWithClient
 
+data ExchangeStatus = ExchangeAvailable { esExchangeRate :: Integer }
+                    | ExchangeUnavailable
+
 data ClientHubCommand = RegisterClient { chcAccount :: BridgewalkerAccount
                                        , chcAnswerChan :: Chan ClientHubAnswer
                                        }
@@ -92,8 +96,7 @@ data ClientHubCommand = RegisterClient { chcAccount :: BridgewalkerAccount
                                     }
                       | ReceivedPing { chcAccount :: BridgewalkerAccount }
                       | CheckTimeouts
-                      | ExchangeAvailable
-                      | ExchangeUnavailable
+                      | ExchangeUpdate { chcExchangeStatus :: ExchangeStatus }
                       | SignalPossibleBitcoinEvents
                       | SignalAccountUpdates { chcAccounts ::
                                                     [BridgewalkerAccount] }
@@ -114,6 +117,7 @@ data ClientStatus = ClientStatus { csUSDBalance :: Integer
                                  , csPrimaryBTCAddress :: T.Text
                                  , csPendingTxs :: [ClientPendingTransaction]
                                  , csExchangeAvailable :: Bool
+                                 , csExchangeRate :: Integer
                                  }
                     deriving (Show)
 
@@ -252,11 +256,13 @@ instance ToJSON ClientStatus where
             pendingTxs = csPendingTxs cs
             primaryBTCAddress = csPrimaryBTCAddress cs
             exchangeAvailable = csExchangeAvailable cs
+            exchangeRate = csExchangeRate cs
         in object [ "usd_balance" .= usdBalance
                   , "btc_in" .= btcIn
                   , "primary_btc_address" .= primaryBTCAddress
                   , "pending_txs" .= pendingTxs
                   , "exchange_available" .= exchangeAvailable
+                  , "exchange_rate" .= exchangeRate
                   ]
 
 instance Serialize Day where
