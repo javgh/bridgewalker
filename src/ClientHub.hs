@@ -200,16 +200,17 @@ periodicTimeoutCheck (ClientHubHandle chChan) =
 periodicExchangeCheck :: ClientHubHandle -> BridgewalkerHandles -> IO ()
 periodicExchangeCheck (ClientHubHandle chChan) bwHandles =
     let depthStoreHandle = mtgoxDepthStoreHandle . bhMtGoxHandles $ bwHandles
+        tickerMonitorHandle = mtgoxTickerMonitorHandle . bhMtGoxHandles $
+                                                                    bwHandles
         testAmount = 1 * 10 ^ (8 :: Integer)
     in forever $ do
-        testBuy <- simulateBTCBuy depthStoreHandle testAmount
-        testSell <- case testBuy of
-                        DepthStoreAnswer _ ->
-                            simulateBTCSell depthStoreHandle testAmount
-                        _ -> return DepthStoreUnavailable   -- short circuit
-        let status = case (testBuy, testSell) of
-                        (DepthStoreAnswer buyRate, DepthStoreAnswer sellRate) ->
-                            ExchangeAvailable $ (buyRate + sellRate) `div` 2
+        dsTest <- simulateBTCBuy depthStoreHandle testAmount
+        tickerStatus <- getTickerStatus tickerMonitorHandle
+        let exchangeRate = case tickerStatus of
+                                ts@TickerStatus{} -> tsLast ts
+                                TickerUnavailable -> 0
+        let status = case dsTest of
+                        DepthStoreAnswer _ -> ExchangeAvailable exchangeRate
                         _ -> ExchangeUnavailable
         writeChan chChan $ ExchangeUpdate status
         threadDelay $ exchangeCheckInterval * 1000 * 1000
