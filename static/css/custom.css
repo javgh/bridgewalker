@@ -1,0 +1,77 @@
+/* BACKGROUND IMAGES
+
+   intro background image */
+#intro {
+    background-image:url(../img/bg/intro-1.jpg)
+    }
+
+/* body background image */
+body {
+    background-image:url(../img/bg/background-1.png);
+    }
+
+
+/* BACKGROUND COLORS
+
+   overall background color */
+html, #sidebar h3 span {
+    background-color:#111719;
+    }
+
+/* background color for the main content area */
+#content, .tabs-container {
+    background-color:#f8fafc;
+    }
+
+/* color for the purchase button */
+#buy {
+    background-color:#3399ee;
+    }
+
+/* color for the icons in the intro */
+#features [class*="icon-"] {
+    color:#3399ee;
+    }
+
+/* color for the icons in the content */
+#content [class*="icon-"] {
+    color:#3399ee;
+    }
+
+
+/* TEXT COLORS
+
+   intro text  */
+#intro-inner p {
+    color:#aaadb0;
+    }
+
+/* titles of the features list */
+#intro-inner li h2 {
+    color:#eee;
+    }
+
+/* descriptions of the features list */
+#intro-inner li {
+    color:#B3B9BF;
+    }
+
+/* text color in the main content */
+#content {
+    color:#393D40;
+    }
+
+/* links */
+a {
+    color:#3399EE;
+    }
+
+/* headers in the sidebar */
+#sidebar h3 {
+    color:#ccc;
+    }
+
+/* text in the sidebar  */
+#sidebar, #newsletter input {
+    color:#aaadb0;
+    }
