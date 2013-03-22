@@ -45,9 +45,7 @@
 
             <div id="phone"></div>
 
-            <!--
             <a href="img/qr.png" class="qr fancybox"><span>View QR Code</span></a>
-            -->
         </div><!-- /intro-inner -->
     </div><!-- /intro -->
 
@@ -258,7 +256,7 @@
         </div><!-- /content -->
 
         <div id="sidebar">
-            <a href="http://themeforest.net/item/app-showcase-iphone-and-mobile-app/179129?ref=myTheme" id="buy">Buy this item!</a>
+            <a href="https://play.google.com/store/apps/details?id=com.bridgewalkerapp.androidclient" id="buy">Get Bridgewalker!</a>
 
             <h3>Contact me</h3>
 
