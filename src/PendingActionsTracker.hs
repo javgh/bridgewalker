@@ -289,7 +289,7 @@ sendPayment bwHandles account requestID address amountType expiration = do
             case otherAccountM of
                 Just otherAccount -> do
                     performInternalTransfer bwHandles account
-                                                otherAccount quoteData
+                                            otherAccount amountType quoteData
                     return [account, otherAccount]
                 Nothing -> do
                     sendPaymentExternalPreparationChecks bwHandles quoteData
@@ -299,9 +299,15 @@ sendPayment bwHandles account requestID address amountType expiration = do
                     return [account]
     busyMsg = "The server is very busy at the moment. Please try again later."
 
-performInternalTransfer :: BridgewalkerHandles-> BridgewalkerAccount-> BridgewalkerAccount-> QuoteData-> EitherT String IO ()
-performInternalTransfer bwHandles bwAccount bwOtherAccount quoteData = do
-    let usdAmount = qdUSDRecipient quoteData
+performInternalTransfer :: BridgewalkerHandles-> BridgewalkerAccount-> BridgewalkerAccount-> AmountType-> QuoteData-> EitherT String IO ()
+performInternalTransfer bwHandles bwAccount bwOtherAccount amountType quoteData = do
+    let usdAmount = case amountType of
+                        AmountBasedOnUSDAfterFees _ -> qdUSDAccount quoteData
+                            -- the value of qdUSDRecipient takes fees into
+                            -- account, that do not apply here; therefore use
+                            -- the amount given by the user, which is
+                            -- qdUSDAccount
+                        _ -> qdUSDRecipient quoteData
         dbConn = bhDBConnPAT bwHandles
         logger = bhAppLogger bwHandles
         account = bAccount bwAccount
