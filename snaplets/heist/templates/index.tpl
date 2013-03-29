@@ -215,7 +215,7 @@
                 giving it over to
                 <a href="http://paymium.com/">Paymium</a>.
                 I post on the Bitcoin Forum as user
-                <a href="https://bitcointalk.org/index.php?action=profile">jav</a>.
+                <a href="https://bitcointalk.org/index.php?action=profile;u=4070">jav</a>.
                 </p>
 
                 <h3>Q: How secure is Bridgewalker?</h3>
