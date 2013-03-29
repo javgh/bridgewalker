@@ -38,7 +38,7 @@ import PendingActionsTrackerQueueManagement
 import QuoteUtils
 
 timeoutInSeconds :: Int
-timeoutInSeconds = 30
+timeoutInSeconds = 90
 
 exchangeCheckInterval :: Int
 exchangeCheckInterval = 60  -- seconds
