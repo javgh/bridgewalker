@@ -25,6 +25,7 @@ import CommonTypes
 import Config
 import WebsocketBackend
 
+-- | Ping interval for /deadend handler
 websocketPingInterval :: Int
 websocketPingInterval = 30
 
