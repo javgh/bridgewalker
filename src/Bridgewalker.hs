@@ -9,8 +9,10 @@ import Database.PostgreSQL.Simple
 import Network.BitcoinRPC
 import Network.BitcoinRPC.Events.MarkerAddresses
 import Network.MtGoxAPI
+import System.Exit
 
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Char8 as B8
 
 import AddressUtils
 import ClientHub
@@ -22,6 +24,7 @@ import PendingActionsTracker
 import Rebalancer
 
 import qualified CommonTypes as CT
+import qualified Control.Exception as E
 
 myConnectInfo :: B.ByteString
 myConnectInfo = "dbname=bridgewalker"
@@ -141,8 +144,29 @@ actOnDeposits bwHandles = do
         in [DepositAction { baAmount = amount, CT.baAddress = address }]
     convertToActions _ = []
 
+waitForDB :: IO ()
+waitForDB = do
+    r <- watchdog $ do
+            setInitialDelay $ 1 * 10 ^ (6 :: Integer)      -- 1 second
+            setMaximumRetries 8
+            watchImpatiently $ do
+                t <- tryDB
+                return $ case t of
+                            Left sq@SqlError {} ->
+                                Left . B8.unpack . sqlErrorMsg $ sq
+                            Right _ -> Right ()
+    case r of
+        Left _ -> do
+            putStrLn "Giving up on database - exiting"
+            exitFailure
+        Right _ -> return ()
+  where
+    tryDB :: IO (Either SqlError ())
+    tryDB = E.try $ connectPostgreSQL myConnectInfo >>= \conn -> close conn
+
 initBridgewalker :: IO BridgewalkerHandles
 initBridgewalker = do
+    waitForDB
     bwHandles <- initBridgewalkerHandles myConnectInfo
     _ <- forkIO $ actOnDeposits bwHandles
     return bwHandles
