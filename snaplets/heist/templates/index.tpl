@@ -224,14 +224,15 @@
                 a thing or two about securing servers, but unfortunately there
                 is no such thing as a perfectly secure system. Only the test of
                 time will show, whether I managed to secure it well enough. I
-                can however point to my track record with Instawallet, which has
-                never had a security incident. Security is always a priority in
-                designing my software and the server component is written in
-                Haskell, which is very helpful in building robust systems. All
-                communication between client and server is encrypted and the
-                client generates a strong, random password for its account. That
-                said, Bridgewalker is currently in beta, so proceed with
-                caution.
+                can point to my track record with Instawallet, which had no
+                security incident during the time I ran it (from launch in April
+                2011 until March 2012), although admittedly Paymium had less
+                luck later on. Security is always a priority in designing my
+                software and the server component is written in Haskell, which
+                is very helpful in building robust systems. All communication
+                between client and server is encrypted and the client generates
+                a strong, random password for its account. That said,
+                Bridgewalker is currently in beta, so proceed with caution.
                 </p>
 
                 <h3>Q: Why is the minimum amount for a transaction 0.01 BTC?</h3>
@@ -243,13 +244,34 @@
                 being inherited.
                 </p>
 
+                <h3>Q: Is Bridgewalker compatible with SatoshiDice?</h3>
+                <p>
+                No, it is not. Because Bridgewalker uses a shared wallet, any
+                winnings that are sent back to Bridgewalker can not be
+                attributed to your account. You will need to use a different
+                wallet, if you intend to gamble on SatoshiDice.
+                </p>
+
                 <h3>Q: Will there be a version of Bridgewalker for iOS?</h3>
                 <p>
                 I would like to support iOS, but it seems a little unclear to me
                 at the moment, whether such an app would be allowed in the App
                 Store. I am reluctant to invest the effort to create such an
                 app, if there is a considerable risk that it will not be
-                approved.
+                approved. Things like Cydia do not seem like much of a solution
+                to me, as only a small percentage of people actually jailbreak
+                their device, from what I can gather.
+                </p>
+
+                <h3>Q: Will there be a desktop version of Bridgewalker?</h3>
+                <p>
+                Most likely at some point, although it is not a priority at the
+                moment. The current Android client talks to the server over a
+                websocket connection, so either an HTML5 client or some type of
+                desktop client would also be possible instead. I do not have a
+                timeline for such alternative clients, but will document the API
+                at some point (and/or open source the Android client), which
+                would also allow other developers to step in.
                 </p>
             </div><!-- /tab-2 -->
 
