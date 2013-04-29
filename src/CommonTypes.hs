@@ -19,6 +19,7 @@ module CommonTypes
     , LogContent(..)
     , LogEntry(..)
     , QuoteData(..)
+    , PureQuoteData(..)
     , ExchangeStatus(..)
     , AmountType(..)
     , confsNeededForSending
@@ -132,8 +133,15 @@ data QuoteData = QuoteData { qdBTC :: Integer
                            , qdUSDRecipient :: Integer
                            , qdUSDAccount :: Integer
                            , qdSufficientBalance :: Bool
+                           , qdNeedsSmallTxFund :: Bool
                            }
                  deriving (Show)
+
+data PureQuoteData = PureQuoteData { pqdBTC :: Integer
+                                   , pqdUSDRecipient :: Integer
+                                   , pqdUSDAccount :: Integer
+                                   }
+                     deriving (Show)
 
 data ClientPendingTransaction = ClientPendingTransaction
                                     { cptAmount :: Integer
@@ -211,6 +219,13 @@ data LogContent = RebalancerFailure { lcInfo :: String }
                                    , lcAmount :: Integer
                                    , lcInfo :: String
                                    }
+                | SmallTxFundAction { lcBTCChange :: Integer
+                                    , lcUSDChange :: Integer
+                                    , lcBTCTotal :: Integer
+                                    , lcUSDTotal :: Integer
+                                    , lcInfo :: String
+                                    }
+                | SmallTxFundWarning { lcInfo :: String }
                 | GuestAccountCreated { lcAccountName :: String }
                 | UserLoggedIn { lcAccount :: Integer }
                 | DisconnectedStaleClient

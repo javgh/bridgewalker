@@ -28,6 +28,7 @@ data BridgewalkerConfig = BridgewalkerConfig
                             , bcMtGoxCredentials :: !MtGoxCredentials
                             , bcSafetyMarginBTC :: !Integer
                             , bcSafetyMarginUSD :: !Integer
+                            , bcTypicalTxFee :: !Integer
                             , bcMaximalOrderBTC :: !Integer
                             , bcMtGoxMinimumOrderBTC :: !Integer
                             , bcTargetExchangeFee :: !Double
@@ -75,6 +76,7 @@ readConfig = do
             keySet <- get cp "DEFAULT" "key_set"
             safetyMarginBTCF <- get cp "DEFAULT" "safety_margin_btc"
             safetyMarginUSDF <- get cp "DEFAULT" "safety_margin_usd"
+            typicalTxFeeF <- get cp "DEFAULT" "typical_tx_fee"
             maximalOrderBTCF <- get cp "DEFAULT" "maximal_order_btc"
             mtgoxMinimumOrderBTCF <- get cp "DEFAULT" "mtgox_minimum_order_btc"
             targetExchangeFee <- get cp "DEFAULT" "target_exchange_fee"
@@ -96,6 +98,8 @@ readConfig = do
                     round $ (safetyMarginBTCF :: Double) * 10 ^ (8 :: Integer)
                 safetyMarginUSD =
                     round $ (safetyMarginUSDF :: Double) * 10 ^ (5 :: Integer)
+                typicalTxFee =
+                    round $ (typicalTxFeeF :: Double) * 10 ^ (8 :: Integer)
                 maximalOrderBTC =
                     round $ (maximalOrderBTCF :: Double) * 10 ^ (8 :: Integer)
                 mtgoxMinimumOrderBTC =
@@ -118,6 +122,7 @@ readConfig = do
                           initMtGoxCredentials authKey authSecret
                       , bcSafetyMarginBTC = safetyMarginBTC
                       , bcSafetyMarginUSD = safetyMarginUSD
+                      , bcTypicalTxFee = typicalTxFee
                       , bcMaximalOrderBTC = maximalOrderBTC
                       , bcMtGoxMinimumOrderBTC = mtgoxMinimumOrderBTC
                       , bcTargetExchangeFee = targetExchangeFee
