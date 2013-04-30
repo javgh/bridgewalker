@@ -502,7 +502,7 @@ balanceSmallTxFund bwHandles = do
         dbConn = bhDBConnPAT bwHandles
     btcTotal <- liftIO $ getSmallTxFundBTCTotal dbConn
     when (btcTotal < minimumOrderBTC) $ increaseSmallTxFund bwHandles
-    when (btcTotal > 2 * minimumOrderBTC) $ decreaseSmallTxFund bwHandles
+    when (btcTotal > 3 * minimumOrderBTC) $ decreaseSmallTxFund bwHandles
 
 increaseSmallTxFund :: BridgewalkerHandles -> EitherT String IO ()
 increaseSmallTxFund bwHandles = do
