@@ -463,7 +463,7 @@ buyBTCViaSmallTxFund bwHandles bwAccount quoteData = do
                     , lcUSDFee = 0
                     , lcUSDExtraFee = 0
                     , lcInfo = formatBTCAmount btcAmount ++ " BTC + "
-                                ++ formatBTCAmount typicalTxFee ++ " BTC "
+                                ++ formatBTCAmount typicalTxFee ++ " BTC"
                                 ++ " bought from small tx fund"
                                 ++ " for a total cost of "
                                 ++ formatUSDAmount usdChange ++ " USD."
