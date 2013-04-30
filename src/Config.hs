@@ -29,7 +29,7 @@ data BridgewalkerConfig = BridgewalkerConfig
                             , bcSafetyMarginBTC :: !Integer
                             , bcSafetyMarginUSD :: !Integer
                             , bcTypicalTxFee :: !Integer
-                            , bcMaximalOrderBTC :: !Integer
+                            , bcMaximumOrderBTC :: !Integer
                             , bcMtGoxMinimumOrderBTC :: !Integer
                             , bcTargetExchangeFee :: !Double
                             , bcNotifyFile :: !FilePath
@@ -77,7 +77,7 @@ readConfig = do
             safetyMarginBTCF <- get cp "DEFAULT" "safety_margin_btc"
             safetyMarginUSDF <- get cp "DEFAULT" "safety_margin_usd"
             typicalTxFeeF <- get cp "DEFAULT" "typical_tx_fee"
-            maximalOrderBTCF <- get cp "DEFAULT" "maximal_order_btc"
+            maximumOrderBTCF <- get cp "DEFAULT" "maximum_order_btc"
             mtgoxMinimumOrderBTCF <- get cp "DEFAULT" "mtgox_minimum_order_btc"
             targetExchangeFee <- get cp "DEFAULT" "target_exchange_fee"
             notifyFile <- get cp "DEFAULT" "bitcoind_notify_file"
@@ -100,8 +100,8 @@ readConfig = do
                     round $ (safetyMarginUSDF :: Double) * 10 ^ (5 :: Integer)
                 typicalTxFee =
                     round $ (typicalTxFeeF :: Double) * 10 ^ (8 :: Integer)
-                maximalOrderBTC =
-                    round $ (maximalOrderBTCF :: Double) * 10 ^ (8 :: Integer)
+                maximumOrderBTC =
+                    round $ (maximumOrderBTCF :: Double) * 10 ^ (8 :: Integer)
                 mtgoxMinimumOrderBTC =
                     round $ (mtgoxMinimumOrderBTCF :: Double)
                                 * 10 ^ (8 :: Integer)
@@ -111,7 +111,7 @@ readConfig = do
                     throwError (OtherProblem "Unable to read size\
                                              \ of working fund.", "")
                 Just wf ->
-                    when (safetyMarginBTC + maximalOrderBTC > wf) $
+                    when (safetyMarginBTC + maximumOrderBTC > wf) $
                         throwError (OtherProblem "Working fund not large\
                                                  \ enough to deal with\
                                                  \ largest possible order."
@@ -123,7 +123,7 @@ readConfig = do
                       , bcSafetyMarginBTC = safetyMarginBTC
                       , bcSafetyMarginUSD = safetyMarginUSD
                       , bcTypicalTxFee = typicalTxFee
-                      , bcMaximalOrderBTC = maximalOrderBTC
+                      , bcMaximumOrderBTC = maximumOrderBTC
                       , bcMtGoxMinimumOrderBTC = mtgoxMinimumOrderBTC
                       , bcTargetExchangeFee = targetExchangeFee
                       , bcNotifyFile = notifyFile

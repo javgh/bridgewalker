@@ -253,9 +253,9 @@ sellBTCViaMtGox bwHandles amount bwAccount = do
     let mtgoxHandles = bhMtGoxHandles bwHandles
         logger = bhAppLogger bwHandles
         safetyMarginBTC = bcSafetyMarginBTC . bhConfig $ bwHandles
-        maximalOrderBTC = bcMaximalOrderBTC . bhConfig $ bwHandles
+        maximumOrderBTC = bcMaximumOrderBTC . bhConfig $ bwHandles
         account = bAccount bwAccount
-        adjustedAmount = min maximalOrderBTC amount
+        adjustedAmount = min maximumOrderBTC amount
         remainingAmount = amount - adjustedAmount
     sell <- tryToExecuteSellOrder mtgoxHandles safetyMarginBTC adjustedAmount
     case sell of
@@ -691,11 +691,15 @@ sendPaymentExternalPreparationChecks bwHandles quoteData = do
 
 checkOrderRange :: QuoteData -> BridgewalkerHandles -> EitherT String IO ()
 checkOrderRange quoteData bwHandles = do
-    let maximalOrderBTC = bcMaximalOrderBTC . bhConfig $ bwHandles
-        maximalOrderBTCStr = formatBTCAmount maximalOrderBTC ++ " BTC"
+    let maximumOrderBTC = bcMaximumOrderBTC . bhConfig $ bwHandles
+        maximumOrderBTCStr = formatBTCAmount maximumOrderBTC ++ " BTC"
+        minimumOrderBTC = 1 :: Integer
+        minimumOrderBTCStr = formatBTCAmount minimumOrderBTC ++ " BTC"
         btcAmount = qdBTC quoteData
-    tryAssert ("Currently the maximal order size is "
-                ++ maximalOrderBTCStr ++ ".") $ btcAmount <= maximalOrderBTC
+    tryAssert ("Currently the maximum transaction size is "
+                ++ maximumOrderBTCStr ++ ".") $ btcAmount <= maximumOrderBTC
+    tryAssert ("The minimum transaction size is "
+                ++ minimumOrderBTCStr ++ ".") $ btcAmount >= minimumOrderBTC
 
 checkMtGoxWallet :: BridgewalkerHandles -> Integer -> EitherT String IO ()
 checkMtGoxWallet bwHandles neededUSDAmount = do
