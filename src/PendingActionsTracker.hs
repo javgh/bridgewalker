@@ -14,8 +14,6 @@ import Control.Monad.IO.Class
 import Database.PostgreSQL.Simple
 import Data.Time.Clock
 import Network.MtGoxAPI
-import Text.Printf
-import Text.Regex
 
 import qualified Data.Text as T
 import qualified Network.BitcoinRPC as RPC
@@ -25,6 +23,7 @@ import AddressUtils
 import CommonTypes
 import Config
 import DbUtils
+import FormatUtils
 import PendingActionsTrackerQueueManagement
 import QuoteUtils
 
@@ -675,8 +674,10 @@ sendPaymentPreparationChecks bwHandles account address amountType = do
     qc <- liftIO $ compileQuote bwHandles account amountType
     quoteData <- case qc of
                     SuccessfulQuote qd -> return qd
-                    HadNotEnoughDepth -> left "The entered amount is too large."
-                    DepthStoreWasUnavailable -> left mtgoxCommunicationErrorMsg
+                    QuoteCompilationError HadNotEnoughDepth ->
+                        left "The entered amount is too large."
+                    QuoteCompilationError DepthStoreWasUnavailable ->
+                        left mtgoxCommunicationErrorMsg
     tryAssert "Insufficient funds to complete the transaction." $
                     qdSufficientBalance quoteData
     return quoteData
@@ -695,18 +696,6 @@ checkOrderRange quoteData bwHandles = do
         btcAmount = qdBTC quoteData
     tryAssert ("Currently the maximal order size is "
                 ++ maximalOrderBTCStr ++ ".") $ btcAmount <= maximalOrderBTC
-
-formatBTCAmount :: Integer -> String
-formatBTCAmount a =
-    let a' = fromIntegral a / 10 ^ (8 :: Integer) :: Double
-        str = printf "%.8f" a'
-    in subRegex (mkRegex "\\.?0+$") str ""
-
-formatUSDAmount :: Integer -> String
-formatUSDAmount a =
-    let a' = fromIntegral a / 10 ^ (5 :: Integer) :: Double
-        str = printf "%.5f" a'
-    in subRegex (mkRegex "\\.?0+$") str ""
 
 checkMtGoxWallet :: BridgewalkerHandles -> Integer -> EitherT String IO ()
 checkMtGoxWallet bwHandles neededUSDAmount = do

@@ -3,143 +3,110 @@ module QuoteUtils
     , compileSimpleQuoteBTCBuy
     , compileSimpleQuoteBTCSell
     , QuoteCompilation(..)
+    , QCError(..)
     ) where
 
+import Control.Error
+import Control.Monad.IO.Class
 import Network.MtGoxAPI
+import Network.MtGoxAPI.DepthStore
 
 import CommonTypes
 import Config
 import DbUtils
 
 data QuoteCompilation a = SuccessfulQuote a
-                        | HadNotEnoughDepth
-                        | DepthStoreWasUnavailable
+                        | QuoteCompilationError QCError
+
+data QCError = HadNotEnoughDepth
+             | DepthStoreWasUnavailable
+             deriving (Show)
 
 compileSimpleQuoteBTCBuy :: BridgewalkerHandles -> Integer -> IO (QuoteCompilation Integer)
-compileSimpleQuoteBTCBuy bwHandles btcAmount = do
-    let mtgoxHandles = bhMtGoxHandles bwHandles
-        depthStoreHandle = mtgoxDepthStoreHandle mtgoxHandles
-        mtgoxFee = bhMtGoxFee bwHandles
-        targetFee = bcTargetExchangeFee . bhConfig $ bwHandles
-        actualFee = max mtgoxFee targetFee
-    usdAmountBuyM <- simulateBTCBuy depthStoreHandle btcAmount
-    return $ case usdAmountBuyM of
-                DepthStoreAnswer answer ->
-                    SuccessfulQuote $ addFee answer actualFee
-                NotEnoughDepth -> HadNotEnoughDepth
-                DepthStoreUnavailable -> DepthStoreWasUnavailable
+compileSimpleQuoteBTCBuy bwHandles btcAmount = runAsQuoteCompilation $ do
+    usdAmount <- simulateBTCBuy' bwHandles btcAmount
+    return $ addFee usdAmount (getActualFee bwHandles)
 
 compileSimpleQuoteBTCSell :: BridgewalkerHandles -> Integer -> IO (QuoteCompilation Integer)
-compileSimpleQuoteBTCSell bwHandles btcAmount = do
-    let mtgoxHandles = bhMtGoxHandles bwHandles
-        depthStoreHandle = mtgoxDepthStoreHandle mtgoxHandles
-        mtgoxFee = bhMtGoxFee bwHandles
-        targetFee = bcTargetExchangeFee . bhConfig $ bwHandles
-        actualFee = max mtgoxFee targetFee
-    usdAmountSellM <- simulateBTCSell depthStoreHandle btcAmount
-    return $ case usdAmountSellM of
-                DepthStoreAnswer answer ->
-                    SuccessfulQuote $ addFee answer (-1 * actualFee)
-                NotEnoughDepth -> HadNotEnoughDepth
-                DepthStoreUnavailable -> DepthStoreWasUnavailable
+compileSimpleQuoteBTCSell bwHandles btcAmount = runAsQuoteCompilation $ do
+    usdAmount <- simulateBTCSell' bwHandles btcAmount
+    return $ addFee usdAmount (-1 * getActualFee bwHandles)
 
 compileQuote :: BridgewalkerHandles-> BridgewalkerAccount -> AmountType -> IO (QuoteCompilation QuoteData)
-compileQuote bwHandles account amountType = do
+compileQuote bwHandles account amountType = runAsQuoteCompilation $ do
     let typicalTxFee = bcTypicalTxFee . bhConfig $ bwHandles
+        actualFee = getActualFee bwHandles
         dbConn = bhDBConnCH bwHandles
-        mtgoxHandles = bhMtGoxHandles bwHandles
-        depthStoreHandle = mtgoxDepthStoreHandle mtgoxHandles
-    usdBalance <- getUSDBalance dbConn (bAccount account)
-    pureQuote <- compilePureQuote bwHandles amountType
-    feeOverheadUSDM <- simulateBTCBuy depthStoreHandle typicalTxFee
-    return $ case (pureQuote, feeOverheadUSDM) of
-                (SuccessfulQuote pqd, DepthStoreAnswer feeOverheadUSD) ->
-                    SuccessfulQuote $
-                        augmentPureQuote bwHandles pqd feeOverheadUSD usdBalance
-                (HadNotEnoughDepth, _) -> HadNotEnoughDepth
-                (DepthStoreWasUnavailable, _) -> DepthStoreWasUnavailable
-                (_, NotEnoughDepth) -> HadNotEnoughDepth
-                (_, DepthStoreUnavailable) -> DepthStoreWasUnavailable
-
-augmentPureQuote :: BridgewalkerHandles-> PureQuoteData -> Integer -> Integer -> QuoteData
-augmentPureQuote bwHandles pqd feeOverheadUSD usdBalance =
-    let minimumOrderBTC = bcMtGoxMinimumOrderBTC . bhConfig $ bwHandles
-        (usdAccount, needsSmallTxFund) =
-            if pqdBTC pqd < minimumOrderBTC
-                then (pqdUSDAccount pqd + feeOverheadUSD, True)
-                else (pqdUSDAccount pqd, False)
-    in QuoteData { qdBTC = pqdBTC pqd
-                 , qdUSDRecipient = pqdUSDRecipient pqd
-                 , qdUSDAccount = usdAccount
-                 , qdSufficientBalance = usdAccount <= usdBalance
-                 , qdNeedsSmallTxFund = needsSmallTxFund
-                 }
-
-compilePureQuote :: BridgewalkerHandles-> AmountType -> IO (QuoteCompilation PureQuoteData)
-compilePureQuote bwHandles amountType = do
-    let mtgoxHandles = bhMtGoxHandles bwHandles
-        depthStoreHandle = mtgoxDepthStoreHandle mtgoxHandles
-        mtgoxFee = bhMtGoxFee bwHandles
-        targetFee = bcTargetExchangeFee . bhConfig $ bwHandles
-        actualFee = max mtgoxFee targetFee
-    case amountType of
+    -- some preparation
+    isSmallTx <- needsSmallTxFund bwHandles amountType
+    feeOverheadUSD <- if isSmallTx
+        then do
+            usdAmount <- simulateBTCBuy' bwHandles typicalTxFee
+            return $ addFee usdAmount actualFee
+        else return 0
+    -- main calculation
+    pqd <- case amountType of
         AmountBasedOnBTC btc -> do
-            usdAmountBuyM <- simulateBTCBuy depthStoreHandle btc
-            usdAmountSellM <- simulateBTCSell depthStoreHandle btc
-            return $
-                case (usdAmountBuyM, usdAmountSellM) of
-                    (DepthStoreAnswer usdAmountBuy,
-                        DepthStoreAnswer usdAmountSell) ->
-                            let usdAmountBuyWithFee =
-                                    addFee usdAmountBuy actualFee
-                            in SuccessfulQuote
-                                PureQuoteData { pqdBTC = btc
-                                              , pqdUSDRecipient = usdAmountSell
-                                              , pqdUSDAccount =
-                                                    usdAmountBuyWithFee
-                                              }
-                    (NotEnoughDepth, NotEnoughDepth) -> HadNotEnoughDepth
-                    (_, _) -> DepthStoreWasUnavailable
-        AmountBasedOnUSDBeforeFees usd -> do
-            btcAmountM <- simulateUSDBuy depthStoreHandle usd
-            case btcAmountM of
-               DepthStoreAnswer btcAmount -> do
-                   usdAmountNeededM <- simulateBTCBuy depthStoreHandle btcAmount
-                   return $ case usdAmountNeededM of
-                                DepthStoreAnswer usdAmountNeeded ->
-                                    let usdAmountWithFee =
-                                            addFee usdAmountNeeded actualFee
-                                    in SuccessfulQuote
-                                        PureQuoteData { pqdBTC = btcAmount
-                                                      , pqdUSDRecipient = usd
-                                                      , pqdUSDAccount =
-                                                         usdAmountWithFee
-                                                      }
-                                NotEnoughDepth -> HadNotEnoughDepth
-                                DepthStoreUnavailable
-                                    -> DepthStoreWasUnavailable
-               NotEnoughDepth -> return HadNotEnoughDepth
-               DepthStoreUnavailable -> return DepthStoreWasUnavailable
-        AmountBasedOnUSDAfterFees usd -> do
-            let usdBeforeFee = subtractFee usd actualFee
-            btcAmountM <- simulateUSDSell depthStoreHandle usdBeforeFee
-            case btcAmountM of
-               DepthStoreAnswer btcAmount -> do
-                   usdAmountRecipientM <-
-                       simulateBTCSell depthStoreHandle btcAmount
-                   return $ case usdAmountRecipientM of
-                                DepthStoreAnswer usdAmountRecipient ->
-                                    SuccessfulQuote
-                                        PureQuoteData { pqdBTC = btcAmount
-                                                      , pqdUSDRecipient =
-                                                         usdAmountRecipient
-                                                      , pqdUSDAccount = usd
-                                                      }
-                                NotEnoughDepth -> HadNotEnoughDepth
-                                DepthStoreUnavailable
-                                    -> DepthStoreWasUnavailable
-               NotEnoughDepth -> return HadNotEnoughDepth
-               DepthStoreUnavailable -> return DepthStoreWasUnavailable
+            usdNeeded <- simulateBTCBuy' bwHandles btc
+            let usdNeededWithFee = addFee usdNeeded actualFee
+            usdForRecipient <- simulateBTCSell' bwHandles btc
+            return PureQuoteData { pqdBTC = btc
+                                 , pqdUSDRecipient = usdForRecipient
+                                 , pqdUSDAccount = usdNeededWithFee
+                                                      + feeOverheadUSD
+                                 }
+        AmountBasedOnUSDBeforeFees usdForRecipient -> do
+            btc <- simulateUSDBuy' bwHandles usdForRecipient
+            usdNeeded <- simulateBTCBuy' bwHandles btc
+            let usdNeededWithFee = addFee usdNeeded actualFee
+            return PureQuoteData { pqdBTC = btc
+                                 , pqdUSDRecipient = usdForRecipient
+                                 , pqdUSDAccount = usdNeededWithFee
+                                                      + feeOverheadUSD
+                                 }
+        AmountBasedOnUSDAfterFees usdFromOurAccount -> do
+            let usdBeforeFee =
+                    subtractFee (usdFromOurAccount - feeOverheadUSD) actualFee
+            btc <- simulateUSDSell' bwHandles usdBeforeFee
+            usdForRecipient <- simulateBTCSell' bwHandles btc
+            return PureQuoteData { pqdBTC = btc
+                                 , pqdUSDRecipient = usdForRecipient
+                                 , pqdUSDAccount = usdFromOurAccount
+                                 }
+    -- fill in some additional infos
+    usdBalance <- liftIO $ getUSDBalance dbConn (bAccount account)
+    return QuoteData { qdBTC = pqdBTC pqd
+                     , qdUSDRecipient = pqdUSDRecipient pqd
+                     , qdUSDAccount = pqdUSDAccount pqd
+                     , qdSufficientBalance = pqdUSDAccount pqd <= usdBalance
+                     , qdNeedsSmallTxFund = isSmallTx
+                     }
+
+needsSmallTxFund :: MonadIO m =>BridgewalkerHandles -> AmountType -> EitherT QCError m Bool
+needsSmallTxFund bwHandles amountType = do
+    let minimumOrderBTC = bcMtGoxMinimumOrderBTC . bhConfig $ bwHandles
+    btcAmount <- case amountType of
+                    AmountBasedOnBTC btc -> return btc
+                    AmountBasedOnUSDBeforeFees usd ->
+                        simulateUSDBuy' bwHandles usd
+                    AmountBasedOnUSDAfterFees usd ->
+                        let actualFee = getActualFee bwHandles
+                            usdBeforeFee = subtractFee usd actualFee
+                        in simulateUSDSell' bwHandles usdBeforeFee
+    return $ btcAmount < minimumOrderBTC
+
+runAsQuoteCompilation :: Monad m => EitherT QCError m a -> m (QuoteCompilation a)
+runAsQuoteCompilation f = do
+    result <- runEitherT f
+    return $ case result of
+        Right quote -> SuccessfulQuote quote
+        Left errMsg -> QuoteCompilationError errMsg
+
+getActualFee :: BridgewalkerHandles -> Double
+getActualFee bwHandles =
+    let mtgoxFee = bhMtGoxFee bwHandles
+        targetFee = bcTargetExchangeFee . bhConfig $ bwHandles
+    in max mtgoxFee targetFee
 
 addFee :: Integer -> Double -> Integer
 addFee amount fee =
@@ -149,3 +116,31 @@ addFee amount fee =
 subtractFee :: Integer -> Double -> Integer
 subtractFee amount fee =
     round $ fromIntegral amount * (100.0 / (100.0 + fee))
+
+simulateBTCBuy' :: MonadIO m =>BridgewalkerHandles -> Integer -> EitherT QCError m Integer
+simulateBTCBuy' = depthStoreAction simulateBTCBuy
+
+simulateBTCSell' :: MonadIO m =>BridgewalkerHandles -> Integer -> EitherT QCError m Integer
+simulateBTCSell' = depthStoreAction simulateBTCSell
+
+simulateUSDBuy' :: MonadIO m =>BridgewalkerHandles -> Integer -> EitherT QCError m Integer
+simulateUSDBuy' = depthStoreAction simulateUSDBuy
+
+simulateUSDSell' :: MonadIO m =>BridgewalkerHandles -> Integer -> EitherT QCError m Integer
+simulateUSDSell' = depthStoreAction simulateUSDSell
+
+depthStoreAction :: MonadIO m =>(DepthStoreHandle -> t -> IO DepthStoreAnswer)-> BridgewalkerHandles -> t -> EitherT QCError m Integer
+depthStoreAction action bwHandles amount = do
+    let depthStoreHandle = mtgoxDepthStoreHandle . bhMtGoxHandles $ bwHandles
+    answerM <- liftIO $ action depthStoreHandle amount
+    case answerM of
+        DepthStoreAnswer answer -> return answer
+        NotEnoughDepth -> left HadNotEnoughDepth
+        DepthStoreUnavailable -> left DepthStoreWasUnavailable
+
+_debugQuoting :: Show a => IO (QuoteCompilation a) -> IO ()
+_debugQuoting f = do
+    result <- f
+    case result of
+        SuccessfulQuote quote -> print quote
+        QuoteCompilationError errMsg -> print errMsg
