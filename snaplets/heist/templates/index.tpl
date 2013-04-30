@@ -235,15 +235,6 @@
                 Bridgewalker is currently in beta, so proceed with caution.
                 </p>
 
-                <h3>Q: Why is the minimum amount for a transaction 0.01 BTC?</h3>
-                <p>
-                Bridgewalker uses <a href="https://mtgox.com/">Mt.Gox</a> as its
-                Bitcoin exchange which currently has 0.01 BTC as the smallest
-                amount that can be traded. Bridgewalker might support smaller
-                transactions in the future, but for the moment this limit is
-                being inherited.
-                </p>
-
                 <h3>Q: Is Bridgewalker compatible with SatoshiDice?</h3>
                 <p>
                 No, it is not. Because Bridgewalker uses a shared wallet, any
