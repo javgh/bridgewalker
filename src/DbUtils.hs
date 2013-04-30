@@ -152,7 +152,7 @@ getSmallTxFundUSDTotal dbConn = do
                     ++ " while doing getSmallTxFundUSDTotal, but failed."
     Only usdTotal <- expectOneRow errMsg <$>
         query_ dbConn "select usd_total from small_tx_fund\
-                        \ order by timestamp desc\
+                        \ order by timestamp desc, id desc\
                         \ limit 1"
     return usdTotal
 
