@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8" />
-    <meta name="description" content="Bitcoin wallet with a twist: Send and receive bitcoins, but hold US dollar." />
+    <meta name="description" content="Bitcoin wallet with a twist: Send and receive bitcoins, but hold US dollars." />
     <title>Bridgewalker Bitcoin Wallet</title>
     <link rel="shortcut icon" href="img/favicon.png" type="image/png" />
     <link rel="stylesheet" href="css/screen.css" />
@@ -18,8 +18,8 @@
 
             <p>
             Bitcoin wallet with a twist: Send and receive bitcoins, but hold US
-            dollar. Bridgewalker converts back and forth between bitcoins and US
-            dollar just when you need to send some or receive them. Minimize
+            dollars. Bridgewalker converts back and forth between bitcoins and US
+            dollars just when you need to send some or receive them. Minimize
             your exposure to the young currency's exchange rate risk, while
             taking advantage of its strength for fast and cheap world-wide money
             transfer with zero risk of identity theft.
@@ -95,7 +95,7 @@
                         of your account, both in text form as well as a
                         scannable QR code. Transactions to this address will
                         require a number of confirmations - typically three -
-                        after which they will be exchanged for US dollar at
+                        after which they will be exchanged for US dollars at
                         current market price and credited to your account.
                         </p>
 
@@ -120,7 +120,7 @@
                         Use the tab "Send" to make a Bitcoin payment. Either
                         enter the recipient's Bitcoin address or scan it from a
                         QR code. When entering the amount, you can choose
-                        between specifying it in bitcoins or in US dollar and
+                        between specifying it in bitcoins or in US dollars and
                         Bridgewalker will do the currency conversion for you.
                         </p>
 
