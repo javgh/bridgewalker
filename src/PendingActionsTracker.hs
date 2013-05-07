@@ -68,6 +68,8 @@ data SendPaymentAnswer = SendPaymentSuccessful
                             , _spaReason :: T.Text
                             }
 
+data SmallTxFundTotals = SmallTxFundTotals (Integer, Integer)
+
 initialPendingActionsState :: PendingActionsState
 initialPendingActionsState = PendingActionsState { pasSequence = S.empty
                                                  , pasStatus = ""
@@ -216,14 +218,12 @@ tryToSellBTCViaSmallTxFund :: BridgewalkerHandles-> Integer-> BridgewalkerAccoun
 tryToSellBTCViaSmallTxFund bwHandles btcAmount bwAccount = do
     let logger = bhAppLogger bwHandles
         dbConn = bhDBConnPAT bwHandles
-    balanceSmallTxFund bwHandles
+    SmallTxFundTotals (btcTotal, usdTotal) <- balanceSmallTxFund bwHandles
     simpleQuote <- liftIO $
                         compileSimpleQuoteBTCSell bwHandles btcAmount
     usdChange <- case simpleQuote of
                     SuccessfulQuote answer -> return answer
                     _ -> left mtgoxCommunicationErrorMsg
-    btcTotal <- liftIO $ getSmallTxFundBTCTotal dbConn
-    usdTotal <- liftIO $ getSmallTxFundUSDTotal dbConn
     let btcTotal' = btcTotal + btcAmount
         usdTotal' = usdTotal - usdChange
         desc = "Added " ++ formatBTCAmount btcAmount ++ " BTC "
@@ -444,14 +444,14 @@ sendBTC bwHandles bwAccount address btcAmountToSend = do
             liftIO $ logger logMsg
             return txID
 
-buyBTCViaSmallTxFund :: BridgewalkerHandles -> BridgewalkerAccount -> QuoteData -> EitherT String IO Integer
+buyBTCViaSmallTxFund :: BridgewalkerHandles-> BridgewalkerAccount -> QuoteData -> EitherT String IO Integer
 buyBTCViaSmallTxFund bwHandles bwAccount quoteData = do
     let logger = bhAppLogger bwHandles
         dbConn = bhDBConnPAT bwHandles
         account = bAccount bwAccount
         typicalTxFee = bcTypicalTxFee . bhConfig $ bwHandles
         btcAmount = qdBTC quoteData
-    balanceSmallTxFund bwHandles
+    SmallTxFundTotals (btcTotal, usdTotal) <- balanceSmallTxFund bwHandles
     let btcWithFee = btcAmount + typicalTxFee
     simpleQuote <- liftIO $ compileSimpleQuoteBTCBuy bwHandles btcWithFee
     usdChange <- case simpleQuote of
@@ -469,8 +469,6 @@ buyBTCViaSmallTxFund bwHandles bwAccount quoteData = do
                                 ++ formatUSDAmount usdChange ++ " USD."
                     }
     liftIO $ logger logMsg
-    btcTotal <- liftIO $ getSmallTxFundBTCTotal dbConn
-    usdTotal <- liftIO $ getSmallTxFundUSDTotal dbConn
     let btcTotal' = btcTotal - btcWithFee
         usdTotal' = usdTotal + usdChange
         desc = "Used " ++ formatBTCAmount btcWithFee ++ " BTC "
@@ -496,15 +494,23 @@ buyBTCViaSmallTxFund bwHandles bwAccount quoteData = do
     _ <- debitAccount bwHandles bwAccount usdChange btcWithFee
     return btcAmount
 
-balanceSmallTxFund :: BridgewalkerHandles -> EitherT String IO ()
+balanceSmallTxFund :: BridgewalkerHandles -> EitherT String IO SmallTxFundTotals
 balanceSmallTxFund bwHandles = do
     let minimumOrderBTC = bcMtGoxMinimumOrderBTC . bhConfig $ bwHandles
         dbConn = bhDBConnPAT bwHandles
+    -- looking up the totals can only be done before any changes
+    -- happen, as un-commited changes won't be reflected by these queries;
+    -- therefore we pass the totals on manually
     btcTotal <- liftIO $ getSmallTxFundBTCTotal dbConn
-    when (btcTotal < minimumOrderBTC) $ increaseSmallTxFund bwHandles
-    when (btcTotal > 3 * minimumOrderBTC) $ decreaseSmallTxFund bwHandles
+    usdTotal <- liftIO $ getSmallTxFundUSDTotal dbConn
+    let isTooLow = btcTotal < minimumOrderBTC
+        isTooHigh = btcTotal > 3 * minimumOrderBTC
+    case (isTooLow, isTooHigh) of
+        (True, _) -> increaseSmallTxFund bwHandles
+        (_, True) -> decreaseSmallTxFund bwHandles
+        (_, _) -> return $ SmallTxFundTotals (btcTotal, usdTotal)
 
-increaseSmallTxFund :: BridgewalkerHandles -> EitherT String IO ()
+increaseSmallTxFund :: BridgewalkerHandles -> EitherT String IO SmallTxFundTotals
 increaseSmallTxFund bwHandles = do
     let minimumOrderBTC = bcMtGoxMinimumOrderBTC . bhConfig $ bwHandles
         dbConn = bhDBConnPAT bwHandles
@@ -541,9 +547,9 @@ increaseSmallTxFund bwHandles = do
                         \ values (?, ?, ?, ?, ?, ?)"
                         ("Now" :: String, desc, minimumOrderBTC,
                             (-1) * totalCost, btcTotal', usdTotal')
-    return ()
+    return $ SmallTxFundTotals (btcTotal', usdTotal')
 
-decreaseSmallTxFund :: BridgewalkerHandles -> EitherT String IO ()
+decreaseSmallTxFund :: BridgewalkerHandles -> EitherT String IO SmallTxFundTotals
 decreaseSmallTxFund bwHandles = do
     let minimumOrderBTC = bcMtGoxMinimumOrderBTC . bhConfig $ bwHandles
         dbConn = bhDBConnPAT bwHandles
@@ -580,7 +586,7 @@ decreaseSmallTxFund bwHandles = do
                         \ values (?, ?, ?, ?, ?, ?)"
                         ("Now" :: String, desc, (-1) * minimumOrderBTC,
                             totalEarnings, btcTotal', usdTotal')
-    return ()
+    return $ SmallTxFundTotals (btcTotal', usdTotal')
 
 buyBTC :: BridgewalkerHandles-> BridgewalkerAccount -> QuoteData -> EitherT String IO Integer
 buyBTC bwHandles bwAccount quoteData = do

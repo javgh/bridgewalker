@@ -142,7 +142,7 @@ getSmallTxFundBTCTotal dbConn = do
                     ++ " while doing getSmallTxFundBTCTotal, but failed."
     Only btcTotal <- expectOneRow errMsg <$>
         query_ dbConn "select btc_total from small_tx_fund\
-                        \ order by timestamp desc\
+                        \ order by timestamp desc, id desc\
                         \ limit 1"
     return btcTotal
 
