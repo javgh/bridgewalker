@@ -12,6 +12,7 @@ import Database.PostgreSQL.Simple
 import Data.ConfigFile
 import Network.BitcoinRPC
 import Network.BitcoinRPC.Events.MarkerAddresses
+import Network.Metricsd.Client
 import Network.MtGoxAPI hiding (BitcoinAddress)
 import System.Environment
 import System.FilePath
@@ -40,6 +41,7 @@ data BridgewalkerConfig = BridgewalkerConfig
 data BridgewalkerHandles = BridgewalkerHandles
                             { bhLoggingHandle :: LoggingHandle
                             , bhAppLogger :: Logger
+                            , bhMetricsdClient :: MetricsdClientHandle
                             , bhWatchdogLogger :: WatchdogLogger
                             , bhConfig :: BridgewalkerConfig
                             , bhDBConnPAT :: Connection

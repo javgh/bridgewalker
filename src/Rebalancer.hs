@@ -15,6 +15,7 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Data.Time
 import Network.BitcoinRPC
+import Network.Metricsd.Client
 import Network.MtGoxAPI
 import System.Environment
 import System.FilePath
@@ -43,6 +44,7 @@ data RebalancerAction = DoNothing
 data RebalancerData = RebalancerData { rbTimestamp :: Maybe UTCTime
                                      , rbAppLogger :: Logger
                                      , rbWatchdogLogger :: Maybe WatchdogLogger
+                                     , rbMetricsdClient :: MetricsdClientHandle
                                      , rbRPCAuth :: RPCAuth
                                      , rbMtGoxAPIHandles :: MtGoxAPIHandles
                                      , rbSafetyMargin :: Integer
@@ -69,9 +71,9 @@ readTargetBalance = do
   where
     fromDouble d = round $ d * 10 ^ (8 :: Integer)
 
-initRebalancer :: Logger-> Maybe WatchdogLogger-> RPCAuth-> MtGoxAPIHandles-> Integer-> IO RebalancerHandle
-initRebalancer appLogger mLogger rpcAuth mtgoxHandles safetyMargin =
-    let rd = RebalancerData Nothing appLogger mLogger
+initRebalancer :: Logger-> Maybe WatchdogLogger-> MetricsdClientHandle-> RPCAuth-> MtGoxAPIHandles-> Integer-> IO RebalancerHandle
+initRebalancer appLogger mLogger mcHandle rpcAuth mtgoxHandles safetyMargin =
+    let rd = RebalancerData Nothing appLogger mLogger mcHandle
                                 rpcAuth mtgoxHandles safetyMargin
     in RebalancerHandle <$> newMVar rd
 
@@ -81,6 +83,7 @@ runRebalancer rbHandle = do
     hAR <- hasActedRecently (rbTimestamp rd)
     unless hAR $ do
         rlog <- runRebalancer' (rbAppLogger rd) (rbWatchdogLogger rd)
+                                 (rbMetricsdClient rd)
                                  (rbRPCAuth rd) (rbMtGoxAPIHandles rd)
                                  (rbSafetyMargin rd)
         case rlog of
@@ -101,8 +104,8 @@ hasActedRecently (Just timestamp) = do
     let age = diffUTCTime now timestamp
     return $ age < timeBetweenActions
 
-runRebalancer' :: Logger-> Maybe WatchdogLogger-> RPCAuth-> MtGoxAPIHandles-> Integer-> IO (Maybe RebalancerLog)
-runRebalancer' appLogger mLogger rpcAuth mtgoxHandles safetyMargin = do
+runRebalancer' :: Logger-> Maybe WatchdogLogger-> MetricsdClientHandle-> RPCAuth-> MtGoxAPIHandles-> Integer-> IO (Maybe RebalancerLog)
+runRebalancer' appLogger mLogger mcHandle rpcAuth mtgoxHandles safetyMargin = do
     values <- runMaybeT $ do
         tB <- MaybeT readTargetBalance
         zCB <- liftIO $ btcAmount <$> getBalanceR mLogger rpcAuth 0 True
@@ -116,6 +119,9 @@ runRebalancer' appLogger mLogger rpcAuth mtgoxHandles safetyMargin = do
                                                \ fulfilled; returning early."
                    in appLogger msg >> return Nothing
         Just (tB, zCB, eCB, mB) -> do
+            sendGauge mcHandle "rebalancer.bitcoind_balance.unconfirmed" zCB
+            sendGauge mcHandle "rebalancer.bitcoind_balance.confirmed" eCB
+            sendGauge mcHandle "rebalancer.exchange_balance" mB
             let (rlog, action) = decideRebalance tB zCB eCB mB safetyMargin
             case rlog of
                 NothingDoTo -> return ()

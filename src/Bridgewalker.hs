@@ -8,6 +8,7 @@ import Control.Monad
 import Database.PostgreSQL.Simple
 import Network.BitcoinRPC
 import Network.BitcoinRPC.Events.MarkerAddresses
+import Network.Metricsd.Client
 import Network.MtGoxAPI
 import System.Exit
 
@@ -46,6 +47,7 @@ initBridgewalkerHandles :: B.ByteString -> IO BridgewalkerHandles
 initBridgewalkerHandles connectInfo = do
     (lHandle, appLogger) <- initLogging
     let watchdogLogger = adapt appLogger
+    mcHandle <- initMetricsdClient
     bwConfig <- readConfig
     let maConfig = bcMarkerAddresses bwConfig
     dbConn1 <- connectPostgreSQL connectInfo
@@ -68,7 +70,7 @@ initBridgewalkerHandles connectInfo = do
     fbetHandle <- initFilteredBitcoinEventTask (Just watchdogLogger)
                     (bcRPCAuth bwConfig) (bcNotifyFile bwConfig)
                     acceptAfterThreeConfs fetState
-    rbHandle <- initRebalancer appLogger (Just watchdogLogger)
+    rbHandle <- initRebalancer appLogger (Just watchdogLogger) mcHandle
                                     (bcRPCAuth bwConfig) mtgoxHandles
                                     (bcSafetyMarginBTC bwConfig)
     patHandleMVar <- newEmptyMVar
@@ -77,6 +79,7 @@ initBridgewalkerHandles connectInfo = do
             BridgewalkerHandles { bhLoggingHandle = lHandle
                                 , bhAppLogger = appLogger
                                 , bhWatchdogLogger = watchdogLogger
+                                , bhMetricsdClient = mcHandle
                                 , bhConfig = bwConfig
                                 , bhDBConnPAT = dbConn1
                                 , bhDBConnCH = dbConn2
