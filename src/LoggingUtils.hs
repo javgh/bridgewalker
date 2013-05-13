@@ -23,15 +23,15 @@ logName = "bridgewalker"
 linesPerFile :: Integer
 linesPerFile = 100000
 
-initLogging :: IO (LoggingHandle, Logger)
-initLogging = do
+initLogging :: Bool -> IO (LoggingHandle, Logger)
+initLogging copyToStdOut = do
     lHandle <- LoggingHandle <$> newChan
-    _ <- forkIO $ loggerLoop lHandle
+    _ <- forkIO $ loggerLoop lHandle copyToStdOut
     let logger = performLogging lHandle
     return (lHandle, logger)
 
-loggerLoop :: LoggingHandle -> IO ()
-loggerLoop (LoggingHandle cmdChan) = do
+loggerLoop :: LoggingHandle -> Bool -> IO ()
+loggerLoop (LoggingHandle cmdChan) copyToStdOut = do
     mcHandle <- initMetricsdClient
     logfile <- openLogfile
     go mcHandle logfile 0
@@ -41,6 +41,7 @@ loggerLoop (LoggingHandle cmdChan) = do
         case cmd of
             PerformLogging logContent -> do
                 sendMetric mcHandle logContent
+                when copyToStdOut $ logToStdOut logContent
                 (logfile', count') <- logToFile logfile count logContent
                 go mcHandle logfile' count'
 
@@ -69,6 +70,11 @@ sendMetric h UserLoggedIn{} = sendMeter h "user_logins"
 sendMetric h WatchdogError{} = sendMeter h "watchdog_errors"
 sendMetric _ _ = return ()
 
+logToStdOut :: LogContent -> IO ()
+logToStdOut logContent = do
+    now <- getCurrentTime
+    putStrLn $ show now ++ "\t" ++ show logContent
+
 logToFile :: Handle -> Integer -> LogContent -> IO (Handle, Integer)
 logToFile logfile count logContent
   | count < linesPerFile = do
@@ -76,7 +82,6 @@ logToFile logfile count logContent
         let entry = LogEntry now logContent
         hPrint logfile entry
         hFlush logfile      -- TODO: what is the performance impact of this?
-        putStrLn $ show now ++ "\t" ++ show logContent
         return (logfile, count + 1)
   | otherwise = do
         hClose logfile

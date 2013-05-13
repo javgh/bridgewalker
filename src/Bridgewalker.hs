@@ -45,10 +45,10 @@ periodicNudging patHandle = forever $ do
 
 initBridgewalkerHandles :: B.ByteString -> IO BridgewalkerHandles
 initBridgewalkerHandles connectInfo = do
-    (lHandle, appLogger) <- initLogging
+    bwConfig <- readConfig
+    (lHandle, appLogger) <- initLogging (bcStdOutLogging bwConfig)
     let watchdogLogger = adapt appLogger
     mcHandle <- initMetricsdClient
-    bwConfig <- readConfig
     let maConfig = bcMarkerAddresses bwConfig
     dbConn1 <- connectPostgreSQL connectInfo
     dbConn2 <- connectPostgreSQL connectInfo

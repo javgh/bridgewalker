@@ -36,6 +36,7 @@ data BridgewalkerConfig = BridgewalkerConfig
                             , bcNotifyFile :: !FilePath
                             , bcMarkerAddresses
                                 :: ![(BitcoinAddress, BitcoinAmount)]
+                            , bcStdOutLogging :: !Bool
                             }
 
 data BridgewalkerHandles = BridgewalkerHandles
@@ -84,6 +85,7 @@ readConfig = do
             targetExchangeFee <- get cp "DEFAULT" "target_exchange_fee"
             notifyFile <- get cp "DEFAULT" "bitcoind_notify_file"
             markerAddresses <- get cp "DEFAULT" "marker_addresses"
+            stdOutLogging <- get cp "DEFAULT" "stdout_logging"
             let authKey = B8.pack $
                             unScrambleText authKeyScrambled
                                 (case keySet :: Integer of
@@ -131,6 +133,7 @@ readConfig = do
                       , bcNotifyFile = notifyFile
                       , bcMarkerAddresses =
                           adjustMarkerAddresses (read markerAddresses)
+                      , bcStdOutLogging = stdOutLogging
                       }
     case v of
         Left msg -> error $ "Reading the configuration failed " ++ show msg
