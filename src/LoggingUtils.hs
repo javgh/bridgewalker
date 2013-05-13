@@ -6,6 +6,7 @@ import Control.Applicative
 import Control.Concurrent
 import Control.Monad
 import Data.Time
+import Network.Metricsd.Client
 import System.Directory
 import System.FilePath
 import System.IO
@@ -31,15 +32,42 @@ initLogging = do
 
 loggerLoop :: LoggingHandle -> IO ()
 loggerLoop (LoggingHandle cmdChan) = do
+    mcHandle <- initMetricsdClient
     logfile <- openLogfile
-    go logfile 0
+    go mcHandle logfile 0
   where
-    go logfile count = do
+    go mcHandle logfile count = do
         cmd <- readChan cmdChan
         case cmd of
             PerformLogging logContent -> do
+                sendMetric mcHandle logContent
                 (logfile', count') <- logToFile logfile count logContent
-                go logfile' count'
+                go mcHandle logfile' count'
+
+sendMetric :: MetricsdClientHandle -> LogContent -> IO ()
+sendMetric h RebalancerFailure{} = do
+    sendMeter h "rebalancer.failures"
+    sendMeter h "bridgewalker_errors"
+sendMetric h RebalancerAction{} = sendMeter h "rebalancer.actions"
+sendMetric h DepositProcessed{} = sendMeter h "transactions.incoming"
+sendMetric h BTCSold{} = sendMeter h "exchange.btc_sold"
+sendMetric h BTCBought{} = sendMeter h "exchange.btc_bought"
+sendMetric h MtGoxError{} = do
+    sendMeter h "exchange.errors"
+    sendMeter h "bridgewalker_errors"
+sendMetric h MtGoxLowBTCBalance{} = sendMeter h "low_balance"
+sendMetric h BitcoindLowBTCBalance{} = sendMeter h "low_balance"
+sendMetric h BTCSent{} = sendMeter h "transactions.outgoing"
+sendMetric h BTCSendNetworkOrParseError{} = sendMeter h "bridgewalker_errors"
+sendMetric h BTCSendError{} = sendMeter h "bridgewalker_errors"
+sendMetric h SendPaymentFailedCheck{} =
+    sendMeter h "send_payment_failed_checks"
+sendMetric h SmallTxFundAction{} = sendMeter h "small_tx_fund.actions"
+sendMetric h InternalTransfer{} = sendMeter h "internal_transfers"
+sendMetric h GuestAccountCreated{} = sendMeter h "guest_accounts"
+sendMetric h UserLoggedIn{} = sendMeter h "user_logins"
+sendMetric h WatchdogError{} = sendMeter h "watchdog_errors"
+sendMetric _ _ = return ()
 
 logToFile :: Handle -> Integer -> LogContent -> IO (Handle, Integer)
 logToFile logfile count logContent
