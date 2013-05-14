@@ -65,7 +65,7 @@ sendMetric h SendPaymentFailedCheck{} =
     sendMeter h "send_payment_failed_checks"
 sendMetric h SmallTxFundAction{} = sendMeter h "small_tx_fund.actions"
 sendMetric h InternalTransfer{} = sendMeter h "internal_transfers"
-sendMetric h GuestAccountCreated{} = sendMeter h "guest_accounts"
+sendMetric h GuestAccountCreated{} = sendMeter h "guest_account_creations"
 sendMetric h UserLoggedIn{} = sendMeter h "user_logins"
 sendMetric h WatchdogError{} = sendMeter h "watchdog_errors"
 sendMetric _ _ = return ()

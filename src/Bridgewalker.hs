@@ -173,10 +173,23 @@ periodicHeartbeat bwHandles = do
         nudgePendingActionsTracker patHandle
         threadDelay $ 60 * 10 ^ (6 :: Integer)
 
+periodicStats :: BridgewalkerHandles -> IO ()
+periodicStats bwHandles = do
+    let dbConn = bhDBConnPAT bwHandles
+        mcHandle = bhMetricsdClient bwHandles
+    forever $ do
+        (n1, n2, n3, s) <- getAccountStats dbConn
+        sendGauge mcHandle "accounts.total" n1
+        sendGauge mcHandle "accounts.with_at_least_a_cent" n2
+        sendGauge mcHandle "accounts.with_at_least_a_dollar" n3
+        sendGauge mcHandle "accounts.sum_of_usd_balances" s
+        threadDelay $ 5 * 60 * 10 ^ (6 :: Integer)  -- 5 minutes
+
 initBridgewalker :: IO BridgewalkerHandles
 initBridgewalker = do
     waitForDB
     bwHandles <- initBridgewalkerHandles myConnectInfo
     _ <- forkIO $ actOnDeposits bwHandles
     _ <- forkIO $ periodicHeartbeat bwHandles
+    _ <- forkIO $ periodicStats bwHandles
     return bwHandles

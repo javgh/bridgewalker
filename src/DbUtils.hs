@@ -13,6 +13,7 @@ module DbUtils
     , getAccountByAddress
     , getSmallTxFundBTCTotal
     , getSmallTxFundUSDTotal
+    , getAccountStats
     , debugConnection
     , withSerialTransaction
     ) where
@@ -155,6 +156,24 @@ getSmallTxFundUSDTotal dbConn = do
                         \ order by timestamp desc, id desc\
                         \ limit 1"
     return usdTotal
+
+-- | Return some statistics about accounts: Number of accounts, number of
+-- accounts with a balance >= 0.01 USD, number of accounts with a balance >=
+-- 1 USD and sum of all USD balances.
+getAccountStats :: Connection -> IO (Integer, Integer, Integer, Integer)
+getAccountStats dbConn = do
+    let errMsg = "Expected as least one row while compiling account statistics"
+    Only n1 <- expectOneRow errMsg <$>  -- number of accounts
+        query_ dbConn "select count(1) from accounts"
+    Only n2 <- expectOneRow errMsg <$>  -- accounts with a balance >= 0.01 USD
+        query_ dbConn "select count(1) from accounts\
+                        \ where usd_balance >= 1000"
+    Only n3 <- expectOneRow errMsg <$>  -- accounts with a balance >= 1 USD
+        query_ dbConn "select count(1) from accounts\
+                        \ where usd_balance >= 100000"
+    Only s <- expectOneRow errMsg <$>   -- sum of all USD balances
+        query_ dbConn "select sum(usd_balance) from accounts"
+    return (n1, n2, n3, s)
 
 expectOneRow :: String -> [a] -> a
 expectOneRow errMsg [] = error errMsg
