@@ -13,6 +13,7 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Database.PostgreSQL.Simple
 import Data.Time.Clock
+import Network.Metricsd.Client
 import Network.MtGoxAPI
 
 import qualified Data.Text as T
@@ -88,8 +89,10 @@ trackerLoop bwHandles chan =
     let dbConn = bhDBConnPAT bwHandles
         dbLock = bhDBWriteLock bwHandles
         chHandle = bhClientHubHandle bwHandles
+        mcHandle = bhMetricsdClient bwHandles
     in forever $ do
         _ <- readChan chan
+        startTimestamp <- getCurrentTime
         (touchedAccounts, sendPaymentAnswerM)
             <- withSerialTransaction dbLock dbConn $ do
                 paState <- readPendingActionsStateFromDB dbConn
@@ -105,6 +108,10 @@ trackerLoop bwHandles chan =
             Just (SendPaymentFailed account requestID reason) ->
                 CH.signalFailedSend chHandle account requestID reason
         CH.signalAccountUpdates chHandle touchedAccounts
+        stopTimestamp <- getCurrentTime
+        let duration = round $ 1000 * diffUTCTime stopTimestamp startTimestamp
+                        -- in ms
+        sendHistogram mcHandle "bridgewalker_action_time" duration
 
 maybeProcessOneAction :: BridgewalkerHandles-> PendingActionsState-> IO(PendingActionsState,Bool,[BridgewalkerAccount],Maybe SendPaymentAnswer)
 maybeProcessOneAction bwHandles paState =
