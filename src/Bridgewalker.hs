@@ -38,11 +38,6 @@ periodicRebalancing rbHandle = forever $ do
     runRebalancer rbHandle
     threadDelay $ 5 * 10 ^ (6 :: Integer)
 
-periodicNudging :: PendingActionsTrackerHandle -> IO ()
-periodicNudging patHandle = forever $ do
-    nudgePendingActionsTracker patHandle
-    threadDelay $ 60 * 10 ^ (6 :: Integer)
-
 initBridgewalkerHandles :: B.ByteString -> IO BridgewalkerHandles
 initBridgewalkerHandles connectInfo = do
     bwConfig <- readConfig
@@ -100,7 +95,6 @@ initBridgewalkerHandles connectInfo = do
     let bwHandles = preliminaryBWHandles { bhClientHubHandle = chHandle }
     patHandle <- initPendingActionsTracker bwHandles
     putMVar patHandleMVar patHandle
-    _ <- forkIO $ periodicNudging patHandle
     return bwHandles
   where
     adapt :: Logger -> WatchdogLogger
@@ -167,9 +161,22 @@ waitForDB = do
     tryDB :: IO (Either SqlError ())
     tryDB = E.try $ connectPostgreSQL myConnectInfo >>= \conn -> close conn
 
+periodicHeartbeat :: BridgewalkerHandles -> IO ()
+periodicHeartbeat bwHandles = do
+    let dbConn = bhDBConnPAT bwHandles
+        dbLock = bhDBWriteLock bwHandles
+        patHandleMVar = bhPendingActionsTrackerHandleMVar bwHandles
+    patHandle <- readMVar patHandleMVar
+    forever $ do
+        withSerialTransaction dbLock dbConn $
+            addPendingActions dbConn [HeartbeatAction]
+        nudgePendingActionsTracker patHandle
+        threadDelay $ 60 * 10 ^ (6 :: Integer)
+
 initBridgewalker :: IO BridgewalkerHandles
 initBridgewalker = do
     waitForDB
     bwHandles <- initBridgewalkerHandles myConnectInfo
     _ <- forkIO $ actOnDeposits bwHandles
+    _ <- forkIO $ periodicHeartbeat bwHandles
     return bwHandles

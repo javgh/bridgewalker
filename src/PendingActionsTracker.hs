@@ -131,6 +131,7 @@ processOneAction bwHandles action paState' = do
                             requestID address amountType expiration
         PauseAction expiration ->
             checkPause expiration
+        HeartbeatAction -> signalHeartbeat bwHandles
     case modification of
         RemoveAction ->
             -- nothing to be done, action has already been popped off;
@@ -162,6 +163,12 @@ checkPause expiration = do
     return $ if now >= expiration
                 then (RemoveAction, [], Nothing)
                 else (KeepAction, [], Nothing)
+
+signalHeartbeat :: BridgewalkerHandles-> IO (PendingActionsStateModification, [BridgewalkerAccount], Maybe SendPaymentAnswer)
+signalHeartbeat bwHandles = do
+    let mcHandle = bhMetricsdClient bwHandles
+    sendMeter mcHandle "bridgewalker_heartbeat"
+    return (RemoveAction, [], Nothing)
 
 processDeposit :: BridgewalkerHandles-> Integer -> RPC.BitcoinAddress -> IO (PendingActionsStateModification, [BridgewalkerAccount], Maybe SendPaymentAnswer)
 processDeposit bwHandles amount address = do

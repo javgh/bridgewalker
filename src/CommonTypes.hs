@@ -69,6 +69,7 @@ data BridgewalkerAction = DepositAction { baAmount :: Integer
                                             , baExpiration :: UTCTime
                                             }
                         | PauseAction { baExpiration :: UTCTime }
+                        | HeartbeatAction
                         deriving (Show, Generic)
 
 data ClientHubAnswer = ForwardStatusToClient ClientStatus
