@@ -533,8 +533,8 @@ increaseSmallTxFund bwHandles = do
     checkMtGoxWallet bwHandles 0
     btcTotal <- liftIO $ getSmallTxFundBTCTotal dbConn
     usdTotal <- liftIO $ getSmallTxFundUSDTotal dbConn
-    mtgoxOrder <- liftIO $ callHTTPApi mtgoxHandles submitOrder
-                                            OrderTypeBuyBTC minimumOrderBTC
+    mtgoxOrder <- liftIO $ submitOrder mtgoxHandles
+                                OrderTypeBuyBTC minimumOrderBTC
     orderStats <- case mtgoxOrder of
                     Left orderErr -> do
                         let logMsg = MtGoxError orderErr
@@ -572,8 +572,8 @@ decreaseSmallTxFund bwHandles = do
     checkMtGoxWallet bwHandles 0
     btcTotal <- liftIO $ getSmallTxFundBTCTotal dbConn
     usdTotal <- liftIO $ getSmallTxFundUSDTotal dbConn
-    mtgoxOrder <- liftIO $ callHTTPApi mtgoxHandles submitOrder
-                                            OrderTypeSellBTC minimumOrderBTC
+    mtgoxOrder <- liftIO $ submitOrder mtgoxHandles
+                                OrderTypeSellBTC minimumOrderBTC
     orderStats <- case mtgoxOrder of
                     Left orderErr -> do
                         let logMsg = MtGoxError orderErr
@@ -609,8 +609,8 @@ buyBTC bwHandles bwAccount quoteData = do
         account = bAccount bwAccount
         targetFee = bcTargetExchangeFee . bhConfig $ bwHandles
         btcAmount = qdBTC quoteData
-    mtgoxOrder <- liftIO $ callHTTPApi mtgoxHandles submitOrder
-                                            OrderTypeBuyBTC btcAmount
+    mtgoxOrder <- liftIO $ submitOrder mtgoxHandles
+                                OrderTypeBuyBTC btcAmount
     orderStats <- case mtgoxOrder of
                     Left orderErr -> do
                         let logMsg = MtGoxError orderErr
@@ -725,8 +725,8 @@ checkMtGoxWallet :: BridgewalkerHandles -> Integer -> EitherT String IO ()
 checkMtGoxWallet bwHandles neededUSDAmount = do
     let mtgoxHandles = bhMtGoxHandles bwHandles
         safetyMarginUSD = bcSafetyMarginUSD . bhConfig $ bwHandles
-    privateInfo <- noteT mtgoxCommunicationErrorMsg
-                    . MaybeT $ callHTTPApi mtgoxHandles getPrivateInfoR
+    privateInfo <- fmapLT (\_ -> mtgoxCommunicationErrorMsg)
+                    . EitherT $ getPrivateInfoR mtgoxHandles
     tryAssert "The server's hot wallet is running low."
                 (piUsdBalance privateInfo >= neededUSDAmount + safetyMarginUSD)
     return ()
@@ -757,12 +757,13 @@ checkAddress bwHandles address = do
 
 tryToExecuteSellOrder :: MtGoxAPIHandles-> Integer -> Integer -> IO (Either SellOrderProblem OrderStats)
 tryToExecuteSellOrder mtgoxHandles safetyMarginBTC amount = runEitherT $ do
-    privateInfo <- noteT (MtGoxCallError "Unable to call getPrivateInfoR.")
-                    . MaybeT $ callHTTPApi mtgoxHandles getPrivateInfoR
+    privateInfo <-
+        fmapLT (\_ -> MtGoxCallError "Unable to call getPrivateInfoR.")
+            . EitherT $ getPrivateInfoR mtgoxHandles
     _ <- tryAssert MtGoxLowBalance
             (piBtcBalance privateInfo >= amount + safetyMarginBTC)
-    EitherT $ adjustMtGoxError <$> callHTTPApi mtgoxHandles submitOrder
-                                                    OrderTypeSellBTC amount
+    EitherT $ adjustMtGoxError <$> submitOrder mtgoxHandles
+                                        OrderTypeSellBTC amount
     -- returns order stats
 
 adjustMtGoxError :: Either String b -> Either SellOrderProblem b

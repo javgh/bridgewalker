@@ -111,8 +111,8 @@ runRebalancer' appLogger mLogger mcHandle rpcAuth mtgoxHandles safetyMargin = do
         zCB <- liftIO $ btcAmount <$> getBalanceR mLogger rpcAuth 0 True
         eCB <- liftIO $ btcAmount <$> getBalanceR mLogger rpcAuth
                                                     confsNeededForSending True
-        mB <- MaybeT $ fmap piBtcBalance <$>
-                                callHTTPApi mtgoxHandles getPrivateInfoR
+        mB <- hushT . EitherT $ fmap piBtcBalance <$>
+                                    getPrivateInfoR mtgoxHandles
         return (tB, zCB, eCB, mB)
     case values of
         Nothing -> let msg = RebalancerFailure "Preconditions of rebalancer not\
@@ -143,19 +143,19 @@ runRebalancer' appLogger mLogger mcHandle rpcAuth mtgoxHandles safetyMargin = do
   where
     mtgoxToBitcoind v = do
         addr <- adjustAddr <$> getNewAddressR Nothing rpcAuth
-        status <- callHTTPApi' mtgoxHandles withdrawBitcoins addr v
+        status <- withdrawBitcoins mtgoxHandles addr v
         let msg = RebalancerAction $
                     "Moving coins from MtGox to Bitcoind; details: "
                         ++ show status ++ "."
         appLogger msg
     bitcoindToMtgox v = do
-        addrM <- fmap adjustAddr <$>
-                    callHTTPApi mtgoxHandles getBitcoinDepositAddressR
+        addrM <- fmap adjustAddr <$> getBitcoinDepositAddressR mtgoxHandles
         case addrM of
-            Nothing -> let msg = RebalancerFailure
-                                    "Unable to get deposit address at MtGox."
-                       in appLogger msg
-            Just addr -> do
+            Left errMsg -> let msg = RebalancerFailure $ "Unable to get deposit\
+                                                         \ address at MtGox ("
+                                                          ++ errMsg ++ ")."
+                           in appLogger msg
+            Right addr -> do
                 status <- sendToAddress rpcAuth addr (BitcoinAmount v)
                 let msg = RebalancerAction $
                             "Moving coins from Bitcoind to MtGox; details: "
