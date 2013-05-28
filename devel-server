@@ -1,0 +1,4 @@
+#!/bin/bash
+
+echo runhaskell -isrc src/Main.hs --timeout=90
+runhaskell -isrc src/Main.hs --timeout=90

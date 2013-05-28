@@ -13,15 +13,17 @@ import Data.Aeson.Types
 import Database.PostgreSQL.Simple
 import System.Random
 
+import qualified Control.Exception as E
 import qualified Data.Attoparsec as AP
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
-
 import qualified Data.HashMap.Strict as H
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
+import qualified GHC.IO.Exception as E
 import qualified Network.BitcoinRPC as RPC
 import qualified Network.WebSockets as WS
+import qualified System.IO.Error as E
 
 import ClientHub
 import CommonTypes
@@ -195,7 +197,13 @@ parseWSCommand cmd =
 websocketBackend :: BridgewalkerHandles -> WS.Request -> WS.WebSockets WS.Hybi00 ()
 websocketBackend bwHandles rq = do
     WS.acceptRequest rq
-    forever $ processMessages bwHandles
+    flip WS.catchWsError catchDisconnect $ forever (processMessages bwHandles)
+  where
+    catchDisconnect e = case E.fromException e of
+        Just WS.ConnectionClosed -> return ()   -- clients might disappear on us,
+                                                -- so ignore these errors;
+        _ -> WS.throwWsError e                  -- everything else is re-thrown
+                                                -- to be reported by Snap
 
 processMessages :: WS.TextProtocol p => BridgewalkerHandles -> WS.WebSockets p ()
 processMessages bwHandles = do
@@ -251,43 +259,51 @@ forwardClientHubAnswers answerChan combinationChan = forever $ do
     writeChan combinationChan $ MessageFromClientHub answer
 
 continueAuthenticated :: WS.TextProtocol p =>Chan AuthenticatedEvent-> WS.Sink p -> ClientHubHandle -> BridgewalkerAccount -> IO ()
-continueAuthenticated combinationChan sink chHandle account = forever $ do
-    combiMsg <- readChan combinationChan
-    case combiMsg of
-        MessageFromClient msg -> case msg of
-            WSRequestStatus -> requestClientStatus chHandle account
-            WSPing -> receivedPing chHandle account
-            WSRequestQuote reqID amountType ->
-                requestQuote chHandle account reqID amountType
-            WSSendPayment reqID address amountType ->
-                sendPayment chHandle account reqID address amountType
-            _ -> let wsData = WS.textData . prepareWSReply $
-                                WSCommandNotAvailable "Command not available\
-                                                      \ after login."
-                 in WS.sendSink sink wsData
-        MessageFromClientHub msg ->
-            let wsData =
-                    case msg of
-                        ForwardStatusToClient status ->
-                            WS.textData . prepareWSReply $ WSStatus status
-                        ForwardQuoteToClient reqID Nothing ->
-                            WS.textData . prepareWSReply $
-                                                WSQuoteUnavailable reqID
-                        ForwardQuoteToClient reqID (Just replyData) ->
-                            WS.textData . prepareWSReply $
-                                               WSQuote reqID replyData
-                        ForwardSuccessfulSend reqID ->
-                            WS.textData . prepareWSReply $
-                               WSSendSuccessful reqID
-                        ForwardFailedSend reqID reason ->
-                            WS.textData . prepareWSReply $
-                               WSSendFailed reqID reason
-                        SendPongToClient ->
-                            WS.textData . prepareWSReply $ WSPong
-                        CloseConnectionWithClient ->
-                            WS.close ("Timeout" :: T.Text)
-            in WS.sendSink sink wsData  -- note: possible exceptions seem
-                                        -- seem to be handled by Snap
+continueAuthenticated combinationChan sink chHandle account =
+    flip E.catchIOError badFileDescriptor $ forever $ do
+        combiMsg <- readChan combinationChan
+        case combiMsg of
+            MessageFromClient msg -> case msg of
+                WSRequestStatus -> requestClientStatus chHandle account
+                WSPing -> receivedPing chHandle account
+                WSRequestQuote reqID amountType ->
+                    requestQuote chHandle account reqID amountType
+                WSSendPayment reqID address amountType ->
+                    sendPayment chHandle account reqID address amountType
+                _ -> let wsData = WS.textData . prepareWSReply $
+                            WSCommandNotAvailable "Command not available\
+                                                   \ after login."
+                     in WS.sendSink sink wsData
+            MessageFromClientHub msg ->
+                let wsData =
+                        case msg of
+                            ForwardStatusToClient status ->
+                                WS.textData . prepareWSReply $ WSStatus status
+                            ForwardQuoteToClient reqID Nothing ->
+                                WS.textData . prepareWSReply $
+                                                    WSQuoteUnavailable reqID
+                            ForwardQuoteToClient reqID (Just replyData) ->
+                                WS.textData . prepareWSReply $
+                                                   WSQuote reqID replyData
+                            ForwardSuccessfulSend reqID ->
+                                WS.textData . prepareWSReply $
+                                   WSSendSuccessful reqID
+                            ForwardFailedSend reqID reason ->
+                                WS.textData . prepareWSReply $
+                                   WSSendFailed reqID reason
+                            SendPongToClient ->
+                                WS.textData . prepareWSReply $ WSPong
+                            CloseConnectionWithClient ->
+                                WS.close ("Timeout" :: T.Text)
+                in WS.sendSink sink wsData
+
+-- Clients might disappear on us, resulting in "invalid argument (Bad file
+-- descriptor). We can ignore those errors - everything else is re-thrown and
+-- appears on stderr.
+badFileDescriptor :: IOError -> IO ()
+badFileDescriptor e = if (E.ioeGetErrorType e == E.InvalidArgument)
+                        then return ()
+                        else ioError e
 
 createGuestAccount :: BridgewalkerHandles -> IO (T.Text, T.Text)
 createGuestAccount bwHandles = do
