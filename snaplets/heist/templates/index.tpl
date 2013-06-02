@@ -275,7 +275,7 @@
 
             <ul>
                 <li>Jan Vornberger</li>
-                <li><a href="jan@uos.de">jan@uos.de</a></li>
+                <li><a href="mailto:jan@uos.de">jan@uos.de</a></li>
             </ul>
 
             <p id="copyright">Copyright &copy; 2013 Jan Vornberger</p>
