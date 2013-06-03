@@ -115,7 +115,7 @@ clientHubLoop (ClientHubHandle chChan) bwHandles = do
                         now <- getCurrentTime
                         let client' = client { cdLastKeepAlive = now }
                             clientSet' = I.updateIx account client' clientSet
-                        sendPong client
+                        sendPong client exchangeStatus
                         go clientSet' addressCache
                                 accountCache exchangeStatus
             SignalPossibleBitcoinEvents -> do
@@ -311,8 +311,12 @@ sendQuote bwHandles client account requestID amountType = do
                         _ -> Nothing
     writeChan answerChan $ ForwardQuoteToClient requestID replyData
 
-sendPong :: ClientData -> IO ()
-sendPong client = writeChan (cdAnswerChan client) SendPongToClient
+sendPong :: ClientData -> ExchangeStatus -> IO ()
+sendPong client exchangeStatus =
+    writeChan (cdAnswerChan client) $ SendPongToClient
+        (case exchangeStatus of
+            ExchangeAvailable rate -> rate
+            ExchangeUnavailable -> 0)
 
 sendSuccessfulSend :: ClientData -> Integer -> IO ()
 sendSuccessfulSend client requestID =

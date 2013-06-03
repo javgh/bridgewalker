@@ -79,7 +79,7 @@ data WebsocketReply = WSStatus { _wrStatus :: ClientStatus }
                                    , _wrReason :: T.Text
                                    }
                     | WSSendSuccessful { _wrRequestID :: Integer }
-                    | WSPong
+                    | WSPong { _wrExchangeRate :: Integer }
                     deriving (Show)
 
 data AuthenticatedEvent = MessageFromClient WebsocketCommand
@@ -177,8 +177,10 @@ instance ToJSON WebsocketReply
         object [ "reply" .= ("send_successful" :: T.Text)
                , "request_id" .= requestID
                ]
-    toJSON WSPong =
-        object [ "reply" .= ("pong" :: T.Text) ]
+    toJSON (WSPong rate) =
+        object [ "reply" .= ("pong" :: T.Text)
+               , "exchange_rate" .= rate
+               ]
 
 toStrict :: BL.ByteString -> B.ByteString
 toStrict = B.concat . BL.toChunks
@@ -291,8 +293,8 @@ continueAuthenticated combinationChan sink chHandle account =
                             ForwardFailedSend reqID reason ->
                                 WS.textData . prepareWSReply $
                                    WSSendFailed reqID reason
-                            SendPongToClient ->
-                                WS.textData . prepareWSReply $ WSPong
+                            SendPongToClient rate ->
+                                WS.textData . prepareWSReply $ WSPong rate
                             CloseConnectionWithClient ->
                                 WS.close ("Timeout" :: T.Text)
                 in WS.sendSink sink wsData

@@ -76,7 +76,7 @@ data ClientHubAnswer = ForwardStatusToClient ClientStatus
                      | ForwardQuoteToClient Integer (Maybe QuoteData)
                      | ForwardSuccessfulSend Integer
                      | ForwardFailedSend Integer T.Text
-                     | SendPongToClient
+                     | SendPongToClient Integer
                      | CloseConnectionWithClient
 
 data ExchangeStatus = ExchangeAvailable { esExchangeRate :: Integer }
