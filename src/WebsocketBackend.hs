@@ -301,9 +301,8 @@ continueAuthenticated combinationChan sink chHandle account =
 -- descriptor). We can ignore those errors - everything else is re-thrown and
 -- appears on stderr.
 badFileDescriptor :: IOError -> IO ()
-badFileDescriptor e = if (E.ioeGetErrorType e == E.InvalidArgument)
-                        then return ()
-                        else ioError e
+badFileDescriptor e =
+    unless (E.ioeGetErrorType e == E.InvalidArgument) $ ioError e
 
 createGuestAccount :: BridgewalkerHandles -> IO (T.Text, T.Text)
 createGuestAccount bwHandles = do
