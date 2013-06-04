@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8" />
-    <meta name="description" content="Bitcoin wallet with a twist: Send and receive bitcoins, but hold US dollars." />
+    <meta name="description" content="Bridgewalker - an exchange rate adjusted Bitcoin wallet" />
     <title>Bridgewalker Bitcoin Wallet</title>
     <link rel="shortcut icon" href="img/favicon.png" type="image/png" />
     <link rel="stylesheet" href="css/screen.css" />
@@ -17,12 +17,14 @@
             <h1 id="logo">Bridgewalker Bitcoin Wallet</h1>
 
             <p>
-            Bitcoin wallet with a twist: Send and receive bitcoins, but hold US
-            dollars. Bridgewalker converts back and forth between bitcoins and US
-            dollars just when you need to send some or receive them. Minimize
-            your exposure to the young currency's exchange rate risk, while
-            taking advantage of its strength for fast and cheap world-wide money
-            transfer with zero risk of identity theft.
+            Bridgewalker is an exchange rate adjusted Bitcoin wallet. Your
+            balance with Bridgewalker will automatically be adjusted upwards, if
+            Bitcoin's exchange rate drops. Conversely, since there is no free
+            lunch, your balance is reduced if the exchange rate rises. The
+            effect is, that your balance stays stable in respect to the counter
+            currency - currently USD. If you deposit $20 worth of bitcoins,
+            Bridgewalker will ensure that you continue to have $20 worth of
+            bitcoins, regardless of how the exchange rate develops.
             </p>
 
             <ul id="features">
@@ -30,11 +32,19 @@
                     <h2><i class="icon-user"></i> One-click registration</h2>
                     Use guest mode to get up and running in seconds. Full
                     accounts coming soon.
+                </li>
                 <li>
                     <h2><i class="icon-money"></i> Fees will only go down</h2>
-                    Fees for the exchange service are currently about 1.5 % for
-                    a "round trip" (receive &amp; send), but will go down in the
-                    future as volume increases.
+                    Fees for this service are 0.75 % on each deposit and
+                    withdrawal (i.e. 1.5 % for a "round trip"), but will go down
+                    in the future as volume increases.
+                </li>
+                <li>
+                    <h2><i class="icon-forward"></i> Instant transactions</h2>
+                    Support for the
+                    <a href="https://en.bitcoin.it/wiki/Green_address">Green Address approach</a>
+                    to instant transactions.
+                </li>
                 <li>
                     <h2><i class="icon-wrench"></i> Beta software</h2>
                     Please note: This software is beta and only a technology
@@ -95,8 +105,7 @@
                         of your account, both in text form as well as a
                         scannable QR code. Transactions to this address will
                         require a number of confirmations - typically three -
-                        after which they will be exchanged for US dollars at
-                        current market price and credited to your account.
+                        after which they will be credited to your account.
                         </p>
 
                         <p>
@@ -176,19 +185,19 @@
                             by the recipient not taken into account).
                             </li>
                             <li>
-                            The cost to you of acquiring the given BTC amount by
+                            The cost of acquiring the given BTC amount by
                             filling current market asks and paying exchange fees
                             in the process.
                             </li>
                         </ul>
 
                         <p>
-                        These two values are displayed as the recipient's side
-                        and your account side, respectively, in the info text
-                        above the "Send payment" button. A percentage
-                        difference between them is calculated, to give you an
-                        idea of the overhead introduced by the currency
-                        conversion (exchange fees and market spread).
+                        The difference between these two values is essentially
+                        the withdrawal fee you are paying to use Bridgewalker
+                        and is displayed in the info text above the "Send
+                        payment" button. A percentage difference is calculated,
+                        to give you an idea of the overhead introduced by the
+                        service.
                         </p>
                     </li>
                 </ul>
@@ -260,8 +269,8 @@
                 moment. The current Android client talks to the server over a
                 websocket connection, so either an HTML5 client or some type of
                 desktop client would also be possible instead. I do not have a
-                timeline for such alternative clients, but will document the API
-                at some point (and/or open source the Android client), which
+                timeframe for such alternative clients, but will document the
+                API at some point (and/or open source the Android client), which
                 would also allow other developers to step in.
                 </p>
             </div><!-- /tab-2 -->
