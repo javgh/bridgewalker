@@ -18,13 +18,14 @@
 
             <p>
             Bridgewalker is an exchange rate adjusted Bitcoin wallet. Your
-            balance with Bridgewalker will automatically be adjusted upwards, if
-            Bitcoin's exchange rate drops. Conversely, since there is no free
-            lunch, your balance is reduced if the exchange rate rises. The
-            effect is, that your balance stays stable in respect to the counter
-            currency - currently USD. If you deposit $20 worth of bitcoins,
-            Bridgewalker will ensure that you continue to have $20 worth of
-            bitcoins, regardless of how the exchange rate develops.
+            balance will automatically be adjusted upwards, if Bitcoin's
+            exchange rate drops. Conversely, your balance is reduced if the
+            exchange rate rises. The effect is, that your balance stays stable
+            in respect to the counter currency - currently USD. If you deposit
+            $20 worth of bitcoins, Bridgewalker will ensure that you continue to
+            have $20 worth of bitcoins, regardless of how the exchange rate
+            develops. Use Bitcoin as a digital payment mechanism, without
+            worrying about its exchange rate!
             </p>
 
             <ul id="features">
@@ -225,6 +226,42 @@
                 <a href="http://paymium.com/">Paymium</a>.
                 I post on the Bitcoin Forum as user
                 <a href="https://bitcointalk.org/index.php?action=profile;u=4070">jav</a>.
+                </p>
+
+                <h3>Q: Why Bridgewalker?</h3>
+                <p>
+                Bitcoin is both a payment mechanism and a currency. The payment
+                mechanism works today: It offers fast, cheap, world-wide digital
+                payments without the problems of identity theft, as it is
+                cash-like and pseudo-anonymous. It is also the first digital
+                payment system without middlemen and therefore is a good
+                candidate for being adopted as a neutral protocol, free of
+                gatekeepers.
+                </p>
+
+                <p>
+                Bitcoin the currency, on the other hand, is still very much an
+                experiment. Being a young currency, it experiences high
+                volatility and economists argue about its long-term viability to
+                be used as the sole currency of an economy.
+                </p>
+
+                <p>
+                To continue this experiment, I believe it is necessary to
+                develop solutions that are usable today and especially address
+                the market volatility. On the merchant side, services like
+                <a href="https://bitpay.com/">BitPay</a> and
+                <a href="https://coinbase.com/">Coinbase</a> offer protection
+                from exchange rate risk. Bridgewalker is the counterpart for
+                customers, offering exchange rate adjusted Bitcoin wallets.
+                </p>
+
+                <p>
+                The combination of these tools allows the use of Bitcoin as a
+                payment mechanism, without being affected by exchange rate
+                swings. Increased use of Bitcoin will hopefully help to
+                stabilize it over time, so that maybe some day these crutches
+                will no longer be necessary.
                 </p>
 
                 <h3>Q: How secure is Bridgewalker?</h3>
