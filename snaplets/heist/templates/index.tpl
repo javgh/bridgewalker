@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="css/screen.css" />
     <link rel="stylesheet" href="css/font-awesome.css" />
     <link rel="stylesheet" href="css/jquery.fancybox.css" />
-    <link rel="stylesheet" href="http://fonts.googleapis.com/css?family=Oswald:700">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Oswald:700">
 </head>
 
 <body id="android2">
