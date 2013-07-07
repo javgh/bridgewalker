@@ -111,17 +111,19 @@ runRebalancer' appLogger mLogger mcHandle rpcAuth mtgoxHandles safetyMargin = do
         zCB <- liftIO $ btcAmount <$> getBalanceR mLogger rpcAuth 0 True
         eCB <- liftIO $ btcAmount <$> getBalanceR mLogger rpcAuth
                                                     confsNeededForSending True
-        mB <- hushT . EitherT $ fmap piBtcBalance <$>
-                                    getPrivateInfoR mtgoxHandles
-        return (tB, zCB, eCB, mB)
+        privateInfo <- hushT . EitherT $ getPrivateInfoR mtgoxHandles
+        let mB = piBtcBalance privateInfo
+            usdB = piUsdBalance privateInfo
+        return (tB, zCB, eCB, mB, usdB)
     case values of
         Nothing -> let msg = RebalancerFailure "Preconditions of rebalancer not\
                                                \ fulfilled; returning early."
                    in appLogger msg >> return Nothing
-        Just (tB, zCB, eCB, mB) -> do
+        Just (tB, zCB, eCB, mB, usdB) -> do
             sendGauge mcHandle "rebalancer.bitcoind_balance.unconfirmed" zCB
             sendGauge mcHandle "rebalancer.bitcoind_balance.confirmed" eCB
-            sendGauge mcHandle "rebalancer.exchange_balance" mB
+            sendGauge mcHandle "rebalancer.exchange_balance_btc" mB
+            sendGauge mcHandle "rebalancer.exchange_balance_usd" usdB
             let (rlog, action) = decideRebalance tB zCB eCB mB safetyMargin
             case rlog of
                 NothingDoTo -> return ()
