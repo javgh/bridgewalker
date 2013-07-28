@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8" />
     <meta name="description" content="Bridgewalker - exchange rate adjusted Bitcoin wallet" />
-    <title>Bridgewalker - exchange rate adjusted Bitcoin Wallet</title>
+    <title>Bridgewalker - exchange rate adjusted Bitcoin wallet</title>
     <link rel="shortcut icon" href="img/favicon.png" type="image/png" />
     <link rel="stylesheet" href="css/screen.css" />
     <link rel="stylesheet" href="css/font-awesome.css" />
