@@ -43,7 +43,7 @@
                 <li>
                     <h2><i class="icon-forward"></i> Instant transactions</h2>
                     Support for the
-                    <a href="https://en.bitcoin.it/wiki/Green_address">Green Address approach</a>
+                    <a href="https://en.bitcoin.it/wiki/Green_address">green address approach</a>
                     to instant transactions.
                 </li>
                 <li>
@@ -266,19 +266,40 @@
 
                 <h3>Q: How secure is Bridgewalker?</h3>
                 <p>
-                That's a tricky question to answer. I like to think that I know
-                a thing or two about securing servers, but unfortunately there
-                is no such thing as a perfectly secure system. Only the test of
-                time will show, whether I managed to secure it well enough. I
-                can point to my track record with Instawallet, which had no
+                Security is a core priority in the design of the Bridgewalker
+                software stack and the server component is written in Haskell,
+                which is very helpful in building robust and secure systems. The
+                production servers are configured to have a very small attack
+                surface and two-factor authentication is utilized in several
+                places. All communication between client and server is encrypted
+                and the client generates a strong, random password for its
+                account.</p>
+
+                <p>I can point to my track record with Instawallet, which had no
                 security incident during the time I ran it (from launch in April
                 2011 until March 2012), although admittedly Paymium had less
-                luck later on. Security is always a priority in designing my
-                software and the server component is written in Haskell, which
-                is very helpful in building robust systems. All communication
-                between client and server is encrypted and the client generates
-                a strong, random password for its account. That said,
-                Bridgewalker is currently in beta, so proceed with caution.
+                luck later on. That said, Bridgewalker is currently in beta, so
+                proceed with caution.
+                </p>
+
+                <h3>Q: Are you taking a gamble on Bitcoin's exchange rate?</h3>
+                <p>
+                No, I do not take on any exchange rate risk! I maintain Bitcoin
+                short positions equivalent to the total amount of bitcoins
+                deposited. Therefore everything is fully hedged.
+                </p>
+
+                <h3>Q: What are green addresses?</h3>
+                <p>
+                Green addresses are a convention by which a sender uses one of
+                his addresses in every one of his transactions, thereby
+                signaling the origin of the transaction to a recipient who
+                recognizes the address. If the recipient trusts this specific
+                sender to not attempt to double spend, the recipient may treat
+                the funds as confirmed the moment they arrive. See the
+                <a href="https://en.bitcoin.it/wiki/Green_address">wiki page</a>
+                for more details. Bridgewalker's green address is currently
+                1MAxx46Dp3tFw933PxPwEYYGCpxYda2pyH.
                 </p>
 
                 <h3>Q: Is Bridgewalker compatible with SatoshiDice?</h3>
