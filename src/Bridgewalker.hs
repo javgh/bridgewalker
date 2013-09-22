@@ -23,6 +23,7 @@ import DbUtils
 import LoggingUtils
 import PendingActionsTracker
 import Rebalancer
+import Utils
 
 import qualified CommonTypes as CT
 import qualified Control.Exception as E
@@ -44,6 +45,7 @@ initBridgewalkerHandles connectInfo = do
     (lHandle, appLogger) <- initLogging (bcStdOutLogging bwConfig)
     let watchdogLogger = adapt appLogger
     mcHandle <- initMetricsdClient
+    sendMeter mcHandle "bridgewalker_init"
     let maConfig = bcMarkerAddresses bwConfig
     dbConn1 <- connectPostgreSQL connectInfo
     dbConn2 <- connectPostgreSQL connectInfo
@@ -69,7 +71,7 @@ initBridgewalkerHandles connectInfo = do
                                     (bcRPCAuth bwConfig) mtgoxHandles
                                     (bcSafetyMarginBTC bwConfig)
     patHandleMVar <- newEmptyMVar
-    _ <- forkIO $ periodicRebalancing rbHandle
+    _ <- linkedForkIO $ periodicRebalancing rbHandle
     let preliminaryBWHandles =
             BridgewalkerHandles { bhLoggingHandle = lHandle
                                 , bhAppLogger = appLogger
@@ -173,6 +175,18 @@ periodicHeartbeat bwHandles = do
         nudgePendingActionsTracker patHandle
         threadDelay $ 60 * 10 ^ (6 :: Integer)
 
+periodicMarketAction :: BridgewalkerHandles -> IO ()
+periodicMarketAction bwHandles = do
+    let patHandleMVar = bhPendingActionsTrackerHandleMVar bwHandles
+        dbConn = bhDBConnPAT bwHandles
+        dbLock = bhDBWriteLock bwHandles
+    patHandle <- readMVar patHandleMVar
+    forever $ do
+        withSerialTransaction dbLock dbConn $
+            addPendingActions dbConn [MarketAction]
+        nudgePendingActionsTracker patHandle
+        threadDelay $ 60 * 10 ^ (6 :: Integer)
+
 periodicStats :: BridgewalkerHandles -> IO ()
 periodicStats bwHandles = do
     let dbConn = bhDBConnPAT bwHandles
@@ -189,7 +203,8 @@ initBridgewalker :: IO BridgewalkerHandles
 initBridgewalker = do
     waitForDB
     bwHandles <- initBridgewalkerHandles myConnectInfo
-    _ <- forkIO $ actOnDeposits bwHandles
-    _ <- forkIO $ periodicHeartbeat bwHandles
-    _ <- forkIO $ periodicStats bwHandles
+    _ <- linkedForkIO $ actOnDeposits bwHandles
+    _ <- linkedForkIO $ periodicHeartbeat bwHandles
+    _ <- linkedForkIO $ periodicMarketAction bwHandles
+    _ <- linkedForkIO $ periodicStats bwHandles
     return bwHandles

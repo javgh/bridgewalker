@@ -36,6 +36,7 @@ import Config
 import DbUtils
 import PendingActionsTrackerQueueManagement
 import QuoteUtils
+import Utils
 
 timeoutInSeconds :: Int
 timeoutInSeconds = 90
@@ -72,9 +73,9 @@ type AccountCache = M.Map BridgewalkerAccount [ClientPendingTransaction]
 initClientHub :: BridgewalkerHandles -> IO ClientHubHandle
 initClientHub bwHandles = do
     handle <- ClientHubHandle <$> newChan
-    _ <- forkIO $ clientHubLoop handle bwHandles
-    _ <- forkIO $ periodicTimeoutCheck handle
-    _ <- forkIO $ periodicExchangeCheck handle bwHandles
+    _ <- linkedForkIO $ clientHubLoop handle bwHandles
+    _ <- linkedForkIO $ periodicTimeoutCheck handle
+    _ <- linkedForkIO $ periodicExchangeCheck handle bwHandles
     return handle
 
 clientHubLoop ::  ClientHubHandle -> BridgewalkerHandles -> IO ()

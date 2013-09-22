@@ -13,6 +13,7 @@ import System.IO
 import System.Locale
 
 import CommonTypes
+import Utils
 
 logDirectory :: String
 logDirectory = "./log/"
@@ -26,7 +27,7 @@ linesPerFile = 100000
 initLogging :: Bool -> IO (LoggingHandle, Logger)
 initLogging copyToStdOut = do
     lHandle <- LoggingHandle <$> newChan
-    _ <- forkIO $ loggerLoop lHandle copyToStdOut
+    _ <- linkedForkIO $ loggerLoop lHandle copyToStdOut
     let logger = performLogging lHandle
     return (lHandle, logger)
 
@@ -51,19 +52,24 @@ sendMetric h RebalancerFailure{} = do
     sendMeter h "bridgewalker_errors"
 sendMetric h RebalancerAction{} = sendMeter h "rebalancer.actions"
 sendMetric h DepositProcessed{} = sendMeter h "transactions.incoming"
-sendMetric h BTCSold{} = sendMeter h "exchange.btc_sold"
-sendMetric h BTCBought{} = sendMeter h "exchange.btc_bought"
+sendMetric h OneShotSellOrderPlaced{} = sendMeter h "exchange.btc_sold"
+sendMetric h OneShotBuyOrderPlaced{} = sendMeter h "exchange.btc_bought"
 sendMetric h MtGoxError{} = do
     sendMeter h "exchange.errors"
     sendMeter h "bridgewalker_errors"
 sendMetric h MtGoxLowBTCBalance{} = sendMeter h "low_balance"
+sendMetric h MtGoxLowUSDBalance{} = sendMeter h "low_hot_wallet"
+sendMetric h MtGoxStillOpenOrders{} = sendMeter h "exchange.still_open_orders"
+sendMetric h MtGoxOrderBookUnavailable{} =
+    sendMeter h "exchange.order_book_unavailable"
+sendMetric h MtGoxOrderBookInsufficient{} =
+    sendMeter h "exchange.order_book_insufficient"
 sendMetric h BitcoindLowBTCBalance{} = sendMeter h "low_balance"
 sendMetric h BTCSent{} = sendMeter h "transactions.outgoing"
 sendMetric h BTCSendNetworkOrParseError{} = sendMeter h "bridgewalker_errors"
 sendMetric h BTCSendError{} = sendMeter h "bridgewalker_errors"
 sendMetric h SendPaymentFailedCheck{} =
     sendMeter h "send_payment_failed_checks"
-sendMetric h SmallTxFundAction{} = sendMeter h "small_tx_fund.actions"
 sendMetric h InternalTransfer{} = sendMeter h "internal_transfers"
 sendMetric h GuestAccountCreated{} = sendMeter h "guest_account_creations"
 sendMetric h UserLoggedIn{} = sendMeter h "user_logins"

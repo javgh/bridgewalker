@@ -76,10 +76,11 @@ Executable bridgewalker
                  , either == 3.2.*
                     -- later versions of either seem to cause problems
                  , errors == 1.4.*
+                 , async == 2.0.*
                  , metricsd-client == 0.1.*
                  , watchdog == 0.2.*
                  , bitcoin-rpc == 0.3.*
-                 , mtgoxapi == 0.4.*
+                 , mtgoxapi == 0.4.1 && < 0.5
 
   if flag(development)
     build-depends:

@@ -29,6 +29,7 @@ import ClientHub
 import CommonTypes
 import Config
 import DbUtils
+import Utils
 
 bridgewalkerServerVersion :: T.Text
 bridgewalkerServerVersion = "0.1"
@@ -238,11 +239,12 @@ processMessages bwHandles = do
                                         registerClientWithHub chHandle account
                         combinationChan <- liftIO newChan
                         sink <- WS.getSink
-                        _ <- liftIO . forkIO $ continueAuthenticated
-                                                combinationChan sink
-                                                chHandle account
-                        _ <- liftIO . forkIO $ forwardClientHubAnswers
-                                                    answerChan combinationChan
+                        _ <- liftIO . linkedForkIO $ continueAuthenticated
+                                                        combinationChan sink
+                                                        chHandle account
+                        _ <- liftIO . linkedForkIO $
+                                        forwardClientHubAnswers
+                                            answerChan combinationChan
                         processMessagesAuthenticated combinationChan
             _ -> WS.sendTextData . prepareWSReply $ WSNeedToBeAuthenticated
 

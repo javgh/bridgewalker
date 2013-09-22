@@ -5,6 +5,7 @@
 module CommonTypes
     ( PendingActionsTrackerHandle(..)
     , PendingActionsState(..)
+    , PendingOrder(..)
     , BridgewalkerAccount(..)
     , BridgewalkerAction(..)
     , ClientHubHandle(..)
@@ -50,8 +51,15 @@ newtype PendingActionsTrackerHandle = PendingActionsTrackerHandle
 data PendingActionsState = PendingActionsState
                                 { pasSequence :: S.Seq BridgewalkerAction
                                 , pasStatus :: String
+                                , pasBTCImbalance :: Integer
+                                , pasLastOrder :: Maybe PendingOrder
                                 }
                            deriving (Show, Generic)
+
+data PendingOrder = PendingOrder { poOpCount :: Integer
+                                 , poAdjustment :: Integer
+                                 }
+                    deriving (Show, Generic)
 
 data BridgewalkerAccount = BridgewalkerAccount { bAccount :: Integer }
                            deriving (Generic, Show, Eq, Ord, Typeable)
@@ -59,9 +67,10 @@ data BridgewalkerAccount = BridgewalkerAccount { bAccount :: Integer }
 data BridgewalkerAction = DepositAction { baAmount :: Integer
                                         , baAddress :: RPC.BitcoinAddress
                                         }
-                        | SellBTCAction { baAmount :: Integer
-                                        , baAccount :: BridgewalkerAccount
-                                        }
+                        | ConvertBTCAcount { baAmount :: Integer
+                                           , baAccount :: BridgewalkerAccount
+                                           }
+                        | MarketAction
                         | SendPaymentAction { baAccount :: BridgewalkerAccount
                                             , baRequestID :: Integer
                                             , baAddress :: RPC.BitcoinAddress
@@ -174,28 +183,36 @@ data LogContent = RebalancerFailure { lcInfo :: String }
                 | LargeDeposit { lcAccount :: Integer
                                , lcInfo :: String
                                }
-                | BTCSold { lcAccount :: Integer
-                          , lcInfo :: String
-                          }
-                | BTCBought { lcAccount :: Integer
-                            , lcUSDSpent :: Integer
-                            , lcUSDFee :: Integer
-                            , lcUSDExtraFee :: Integer
-                            , lcInfo :: String
-                            }
-                | AccountDebited { lcAccount :: Integer
-                                 , lcAmount :: Integer
-                                 , lcBalance :: Integer
-                                 , lcInfo :: String
-                                 }
-                | AccountOverdrawn { lcAccount :: Integer
-                                   , lcAmount :: Integer
-                                   , lcFractionPayed :: Double
-                                   , lcBTCPayedOut :: Integer
-                                   , lcInfo :: String
-                                   }
+                | BTCConvertedToFiat { lcAccount :: Integer
+                                     , lcInfo :: String
+                                     , lcImbalance :: Integer
+                                     }
+                | FiatConvertedToBTC { lcAccount :: Integer
+                                     , lcInfo :: String
+                                     }
+                | ImbalanceAdjustedAfterSending { lcInfo :: String
+                                                , lcImbalance :: Integer
+                                                }
+                | OneShotSellOrderPlaced { lcInfo :: String
+                                         , lcOpCount :: Integer
+                                         , lcAmount :: Integer
+                                         , lcImbalance :: Integer
+                                         }
+                | OneShotBuyOrderPlaced { lcInfo :: String
+                                        , lcOpCount :: Integer
+                                        , lcAmount :: Integer
+                                        , lcImbalance :: Integer
+                                        }
+                | OneShotOrderProbablySuccessful { lcInfo :: String
+                                                 , lcAdjustment :: Integer
+                                                 , lcImbalance :: Integer
+                                                 }
                 | MtGoxLowBTCBalance { lcInfo :: String }
+                | MtGoxLowUSDBalance { lcInfo :: String }
                 | MtGoxError { lcInfo :: String }
+                | MtGoxStillOpenOrders { lcInfo :: String }
+                | MtGoxOrderBookUnavailable { lcInfo :: String }
+                | MtGoxOrderBookInsufficient { lcInfo :: String }
                 | BitcoindLowBTCBalance { lcInfo :: String }
                 | BTCSent { lcAccount :: Integer
                           , lcInfo :: String
@@ -220,13 +237,6 @@ data LogContent = RebalancerFailure { lcInfo :: String }
                                    , lcAmount :: Integer
                                    , lcInfo :: String
                                    }
-                | SmallTxFundAction { lcBTCChange :: Integer
-                                    , lcUSDChange :: Integer
-                                    , lcBTCTotal :: Integer
-                                    , lcUSDTotal :: Integer
-                                    , lcInfo :: String
-                                    }
-                | SmallTxFundWarning { lcInfo :: String }
                 | GuestAccountCreated { lcAccountName :: String }
                 | UserLoggedIn { lcAccount :: Integer }
                 | DisconnectedStaleClient
@@ -296,6 +306,8 @@ instance Serialize UTCTime where
 instance Serialize BridgewalkerAccount
 
 instance Serialize BridgewalkerAction
+
+instance Serialize PendingOrder
 
 instance Serialize PendingActionsState
 

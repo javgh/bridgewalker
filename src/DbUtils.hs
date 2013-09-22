@@ -5,6 +5,7 @@ module DbUtils
     , readPendingActionsStateFromDB
     , writePendingActionsStateToDB
     , getBTCInBalance
+    , adjustBTCInBalance
     , getUSDBalance
     , getClientDBStatus
     , checkGuestNameExists
@@ -85,6 +86,17 @@ getBTCInBalance dbConn account = do
         query dbConn "select btc_in from accounts where account_nr=?"
                         (Only account)
     return balance
+
+-- | Modifies the btc_in balance of the account given by the second argument by
+-- adding the amount given in the third argument. The return value is the new
+-- balance.
+adjustBTCInBalance :: Connection -> Integer -> Integer -> IO Integer
+adjustBTCInBalance dbConn account amount = do
+    btcInBalance <- getBTCInBalance dbConn account
+    let newBalance = btcInBalance + amount
+    _ <- execute dbConn "update accounts set btc_in=? where account_nr=?"
+                        (newBalance, account)
+    return newBalance
 
 getUSDBalance :: Connection -> Integer -> IO Integer
 getUSDBalance dbConn account = do
