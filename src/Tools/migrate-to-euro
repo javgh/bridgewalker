@@ -1,0 +1,6 @@
+#!/bin/bash
+
+exit 1
+pg_dump bridgewalker -a --inserts -t accounts > migrate-to-euro.backup_before.sql
+psql bridgewalker -c "update accounts set usd_balance=floor(usd_balance * 0.74);"
+pg_dump bridgewalker -a --inserts -t accounts > migrate-to-euro.backup_after.sql
