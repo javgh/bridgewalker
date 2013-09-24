@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
     <meta charset="utf-8" />
-    <meta name="description" content="Bridgewalker - exchange rate adjusted Bitcoin wallet" />
-    <title>Bridgewalker - exchange rate adjusted Bitcoin wallet</title>
+    <meta name="description" content="Bridgewalker - euro-denominated wallet for the Bitcoin economy" />
+    <title>Bridgewalker - euro-denominated wallet for the Bitcoin economy</title>
     <link rel="shortcut icon" href="img/favicon.png" type="image/png" />
     <link rel="stylesheet" href="css/screen.css" />
     <link rel="stylesheet" href="css/font-awesome.css" />
@@ -17,15 +17,16 @@
             <h1 id="logo">Bridgewalker Bitcoin Wallet</h1>
 
             <p>
-            Bridgewalker is an exchange rate adjusted Bitcoin wallet. Your
-            balance will automatically be adjusted upwards, if Bitcoin's
-            exchange rate drops. Conversely, your balance is reduced if the
-            exchange rate rises. The effect is, that your balance stays stable
-            in respect to the counter currency - currently USD. If you deposit
-            $20 worth of bitcoins, Bridgewalker will ensure that you continue to
-            have $20 worth of bitcoins, regardless of how the exchange rate
-            develops. Use Bitcoin as a digital payment mechanism, without
-            worrying about its exchange rate!
+            Bridgewalker is a euro-denominated wallet for the Bitcoin economy.
+            Send and receive bitcoins, but maintain your balance in Euros.
+            Bridgewalker converts back and forth between the currencies just
+            when you need to send bitcoins or receive them.
+            </p>
+
+            <p>
+            Bitcoin's strength is fast and cheap world-wide money transfer with
+            zero risk of identity theft. Use Bitcoin as a digital payment
+            mechanism, without worrying about its exchange rate!
             </p>
 
             <ul id="features">
@@ -109,7 +110,8 @@
                         of your account, both in text form as well as a
                         scannable QR code. Transactions to this address will
                         require a number of confirmations - typically three -
-                        after which they will be credited to your account.
+                        after which they will be exchange for Euros at current
+                        market price and credited to your account.
                         </p>
 
                         <p>
@@ -133,12 +135,12 @@
                         Use the tab "Send" to make a Bitcoin payment. Either
                         enter the recipient's Bitcoin address or scan it from a
                         QR code. When entering the amount, you can choose
-                        between specifying it in bitcoins or in US dollars and
+                        between specifying it in bitcoins or in Euros and
                         Bridgewalker will do the currency conversion for you.
                         </p>
 
                         <p>
-                        When giving a USD amount, the recipient will receive
+                        When giving a Euro amount, the recipient will receive
                         bitcoins roughly equivalent to this amount. Because of
                         fees, slightly more will be deducted from your account.
                         If instead you would like to have no more than the
@@ -165,8 +167,7 @@
                         influenced by the current market spread (difference
                         between highest bid and lowest ask). As Bridgewalker's
                         volume increases and Bitcoin markets become more
-                        efficient in general, these fees should go down in the
-                        future.
+                        efficient in general, these fees should go down.
                         </p>
                     </li>
 
@@ -183,25 +184,25 @@
                         <ul>
                             <li>
                             The value of a given BTC transaction in terms of
-                            current market bids (i.e. "how much USD would the
+                            current market bids (i.e. "how much EUR would the
                             recipient earn from selling this amount of BTC given
                             the current order book"; possible exchange fees paid
                             by the recipient not taken into account).
                             </li>
                             <li>
-                            The cost of acquiring the given BTC amount by
+                            The cost to you of acquiring the given BTC amount by
                             filling current market asks and paying exchange fees
                             in the process.
                             </li>
                         </ul>
 
                         <p>
-                        The difference between these two values is essentially
-                        the withdrawal fee you are paying to use Bridgewalker
-                        and is displayed in the info text above the "Send
-                        payment" button. A percentage difference is calculated,
-                        to give you an idea of the overhead introduced by the
-                        service.
+                        These two values are displayed as the recipient's side
+                        and your account side, respectively, in the info text
+                        above the "Send payment" button. A percentage difference
+                        between them is calculated, to give you an idea of the
+                        overhead introduced by the currency conversion (exchange
+                        fees and market spread).
                         </p>
                     </li>
                 </ul>
