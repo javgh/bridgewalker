@@ -1,9 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Tools.CreateDB where
+module Tools.InitDB
+    ( initDB
+    , resetPendingActionsState
+    ) where
 
+import Control.Monad
 import Database.PostgreSQL.Simple
-import Network.BitcoinRPC.Events.MarkerAddresses
 import Data.Serialize
+import Network.BitcoinRPC.Events.MarkerAddresses
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Base64 as B64
@@ -70,8 +74,8 @@ createTableAddresses conn = do
     return ()
 
 
-main :: IO ()
-main = connectPostgreSQL myConnectInfo >>= \conn -> do
+initDB :: IO ()
+initDB = connectPostgreSQL myConnectInfo >>= \conn -> do
     createTableStates conn
     createTableAccounts conn
     createTableAddresses conn

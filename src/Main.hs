@@ -22,11 +22,13 @@ import           Snap.Http.Server
 import           Snap.Snaplet
 import           Snap.Snaplet.Config
 import           Snap.Core
+import           System.Environment
 import           System.IO
 
 import           Bridgewalker
 import           Config
 import           SnapSite
+import           Tools.InitDB
 
 #ifdef DEVELOPMENT
 import           Snap.Loader.Dynamic
@@ -70,6 +72,13 @@ import           Snap.Loader.Static
 --
 main :: IO ()
 main = do
+    args <- getArgs
+    if (args == ["--initdb"])
+        then putStrLn "Initializing Bridgewalker database tables..." >> initDB
+        else bridgewalker
+
+bridgewalker :: IO ()
+bridgewalker = do
     bwHandles <- initBridgewalker
     let myGetActions = getActions bwHandles
 
