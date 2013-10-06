@@ -161,8 +161,12 @@ getAccountStats dbConn = do
     Only n3 <- expectOneRow errMsg <$>  -- accounts with a balance >= 1 USD
         query_ dbConn "select count(1) from accounts\
                         \ where usd_balance >= 100000"
-    Only s <- expectOneRow errMsg <$>   -- sum of all USD balances
-        query_ dbConn "select sum(usd_balance) from accounts"
+    s <- if n1 > 0
+            then do
+                Only s <- expectOneRow errMsg <$>   -- sum of all USD balances
+                    query_ dbConn "select sum(usd_balance) from accounts"
+                return s
+            else return 0
     return (n1, n2, n3, s)
 
 expectOneRow :: String -> [a] -> a
