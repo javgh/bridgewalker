@@ -12,8 +12,6 @@ module DbUtils
     , checkLogin
     , getAccountNumber
     , getAccountByAddress
-    , getSmallTxFundBTCTotal
-    , getSmallTxFundUSDTotal
     , getAccountStats
     , debugConnection
     , withSerialTransaction
@@ -148,26 +146,6 @@ getAccountByAddress dbConn btcAddress = do
     case result of
         [] -> return Nothing
         (Only accountNr:_) -> return $ Just (BridgewalkerAccount accountNr)
-
-getSmallTxFundBTCTotal :: Connection -> IO Integer
-getSmallTxFundBTCTotal dbConn = do
-    let errMsg = "Expected to find value for btc_total"
-                    ++ " while doing getSmallTxFundBTCTotal, but failed."
-    Only btcTotal <- expectOneRow errMsg <$>
-        query_ dbConn "select btc_total from small_tx_fund\
-                        \ order by timestamp desc, id desc\
-                        \ limit 1"
-    return btcTotal
-
-getSmallTxFundUSDTotal :: Connection -> IO Integer
-getSmallTxFundUSDTotal dbConn = do
-    let errMsg = "Expected to find value for usd_total"
-                    ++ " while doing getSmallTxFundUSDTotal, but failed."
-    Only usdTotal <- expectOneRow errMsg <$>
-        query_ dbConn "select usd_total from small_tx_fund\
-                        \ order by timestamp desc, id desc\
-                        \ limit 1"
-    return usdTotal
 
 -- | Return some statistics about accounts: Number of accounts, number of
 -- accounts with a balance >= 0.01 USD, number of accounts with a balance >=
