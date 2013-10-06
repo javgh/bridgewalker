@@ -694,9 +694,14 @@ sendPaymentPreparationChecks bwHandles account address amountType = do
 
 sendPaymentExternalPreparationChecks :: BridgewalkerHandles -> QuoteData -> EitherT String IO ()
 sendPaymentExternalPreparationChecks bwHandles quoteData = do
+    let logger = bhAppLogger bwHandles
     checkOrderRange quoteData bwHandles
+    liftIO . logger $ LogMisc "About to call checkMtGoxWalletNeededUSD'"
     checkMtGoxWalletNeededUSD' bwHandles (qdUSDAccount quoteData)
+    liftIO . logger $ LogMisc "After call to checkMtGoxWalletNeededUSD'"
+    liftIO . logger $ LogMisc "About to call checkBitcoindWallet"
     checkBitcoindWallet bwHandles (qdBTC quoteData)
+    liftIO . logger $ LogMisc "After call to checkBitcoindWallet'"
     return ()
   where
     checkMtGoxWalletNeededUSD' bwHandles' amount =
