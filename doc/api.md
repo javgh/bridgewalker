@@ -92,7 +92,7 @@ than 90 seconds. It is recommended to send a ping every 85 seconds:
 
     {"op": "ping"}
 
-    {"exchange_rate": 10125165, "reply": "pong"}
+    {"reply": "pong", "exchange_rate": 10125165}
 
 The pong reply also contains a current exchange rate, to keep the client
 updated.
@@ -143,7 +143,7 @@ takes the same argument as the quote request plus a Bitcoin address:
     , "address": "1AdjqgSMfhUxTmJJdDBL8qFVfAcy3pRJpu"
     }
 
-    {"request_id": 42, "reply": "send_successful"}
+    {"reply": "send_successful", "request_id": 42}
 
 ## API reference ##
 
@@ -265,5 +265,123 @@ looks like this:
                 , "marker_address": "1MAxx46Dp3tFw933PxPwEYYGCpxYda2pyH"}
     }
 
-The field `marker_address` lists the green address, whose limit has been
+The field `marker_address` lists the green address whose limit has been
 reached.
+
+### Request quote ####
+
+Request a quote for an outgoing payment.
+
+Request:
+
+    { "op": "request_quote"
+    , "request_id": 42
+    , "type": "amount_based_on_btc"
+    , "amount": 1000000
+    }
+
+Description of fields:
+
+ * `request_id`: The client can pick an arbitrary number to be used as the
+   request id. The server will tag the reply with the same number.
+ * `type`: There are three different types of quotes:
+   * `amount_based_on_btc`: The user wants to send out a specific amount of
+     bitcoins. The amount field specifies this amount.
+   * `amount_based_on_usd_before_fees`: The user wants to send a specific Euro
+     amount to a recipient. The server will calculate an equivalent Bitcoin
+     amount and also the fees, which the user will have to pay in addition.
+   * `amount_based_on_usd_after_fees`: The user wants to spend no more than
+     a specific Euro amount. The server will pick the outgoing Bitcoin amount in
+     such a way, that its Euro equivalent plus any occuring fees add up to the
+     amount given by the user.
+ * `amount`: The amount to be used in all calculations. This is either
+   interpreted as Satoshis or as an Euro amount * 10 ^ 5, depending on what type
+   of request is being made.
+
+Reply in case of success:
+
+    { "reply": "quote"
+    , "request_id": 42
+    , "btc": 1000000
+    , "usd_recipient": 101110
+    , "usd_account": 102612
+    , "sufficient_balance": false
+    }
+
+Regardless of which type of request has been made, the reply always has the same
+structure. All three of the following fields are present:
+
+ * `btc`: The amount of bitcoins that will be sent out.
+ * `usd_recipient`: The equivalent Euro amount for this Bitcoin payment.
+ * `usd_account`: The Euro amount which will be deducted from the user's
+   account. So `usd_account` - `usd_recipient` is essential the fee the user
+   is paying.
+
+Bridgewalker's website has a few more details about these estimations.
+
+Reply in case of failure:
+
+    { "reply": "quote_unavailable"
+    , "request_id": 42
+    }
+
+This reply can occur, when the server has no reliable market data (because the
+exchange connection is down). It also happens, when the requested amount is so
+large, that it exceeds the sum of available offers at the exchange.
+
+### Send payment ####
+
+Initiate an outgoing Bitcoin payment.
+
+Request:
+
+    { "op": "send_payment"
+    , "request_id": 42
+    , "type": "amount_based_on_btc"
+    , "amount": 500000
+    , "address": "1AdjqgSMfhUxTmJJdDBL8qFVfAcy3pRJpu"
+    }
+
+The field `type` accepts the same options, as the quote request command (see
+above) and the `amount` field is interpreted accordingly (either as a Bitcoin
+amount or a Euro amount).
+
+Reply in case of success:
+
+    {"reply": "send_successful", "request_id": 42}
+
+Reply in case of failure:
+
+    { "reply": "send_failed"
+    , "request_id": 42
+    , "reason": "Insufficient funds to complete the transaction."
+    }
+
+### Send ping ####
+
+Send ping. The server will timeout any clients, that do not send a ping command
+for more than 90 seconds. It is recommended to send a ping every 85 seconds.
+
+Request:
+
+    {"op": "ping"}
+
+Reply:
+
+    {"reply": "pong", "exchange_rate": 10125165}
+
+### Miscellaneous replies ###
+
+If the server did not understand a command, it will reply with:
+
+    {"reply": "not_understood", "info": "Malformed JSON"}
+
+Some commands are no longer available after the client has logged in. In this
+case the server will reply with:
+
+    {"reply": "not_available", "info": "Command not available after login."}
+
+Conversely, for commands that are only available after login, the server will
+respond with the following to unauthenticated clients:
+
+    {"reply": "need_to_be_authenticated"}
