@@ -349,6 +349,12 @@
                 <li><a href="mailto:jan@uos.de">jan@uos.de</a></li>
             </ul>
 
+            <h3>Follow me</h3>
+
+            <ul id="social">
+                <li><a href="https://www.twitter.com/bridgewalkerapp" id="twitter">Twitter</a></li>
+            </ul>
+
             <p id="copyright">Copyright &copy; 2013 Jan Vornberger</p>
         </div><!-- /sidebar -->
     </div><!-- /wrapper -->    
