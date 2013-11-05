@@ -268,12 +268,14 @@ convertBTC bwHandles amount bwAccount = do
         adjustedAmount = min maximumOrderBTC amount
         remainingAmount = amount - adjustedAmount
     usdAmountM <- liftIO . runEitherT $ do
+                    checkMtGoxIdle bwHandles
                     checkMtGoxWalletNeededBTC bwHandles adjustedAmount
                     compileSimpleQuoteBTCSellWithLog bwHandles adjustedAmount
     case usdAmountM of
         Left (ErrorBundle userMsg logMsgM) -> do    -- either Mt.Gox error
                                                     -- or Mt.Gox low balance
                                                     -- or depth store problems
+                                                    -- or Mt.Gox not idle
             whenJust logMsgM $ \logMsg -> liftIO (logger logMsg)
             return $ AddPauseAction userMsg
         Right usdAmount -> do  -- everything looks good,
@@ -747,6 +749,24 @@ checkMtGoxWalletNeededUSD bwHandles amount = do
   where
     logMsgLowBalance = Just $ MtGoxLowUSDBalance
                                     "Mt.Gox hot wallet is running low."
+
+checkMtGoxIdle :: BridgewalkerHandles -> EitherT ErrorBundle IO ()
+checkMtGoxIdle bwHandles = do
+    let mtgoxHandles = bhMtGoxHandles bwHandles
+    OpenOrderCount count <- liftIO (getOrderCountR mtgoxHandles)
+                                >>= bundleMtGoxError
+                                        "getOrderCountR"
+                                        "checking whether Mt.Gox is idle"
+    tryAssert (ErrorBundle "The server is waiting for\
+                           \ scheduled trades to execute."
+                           logMsgOpenOrders)
+              (count == 0)
+    return ()
+  where
+    logMsgOpenOrders =
+        Just $ MtGoxStillOpenOrders "BTC conversion has been paused,\
+                                    \ because Mt.Gox is still executing\
+                                    \ previous trades."
 
 checkBitcoindWallet :: BridgewalkerHandles -> Integer -> EitherT String IO ()
 checkBitcoindWallet bwHandles neededBTCAmount = do
