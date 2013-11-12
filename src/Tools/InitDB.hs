@@ -50,7 +50,7 @@ createTableAccounts :: Connection -> IO ()
 createTableAccounts conn = do
     _ <- execute_ conn
             "create table accounts ( account_nr serial primary key\
-                                   \, btc_in integer\
+                                   \, btc_in bigint\
                                    \, usd_balance integer\
                                    \, account_name text\
                                    \, account_pw text\
