@@ -79,7 +79,7 @@ Executable bridgewalker
                  , async == 2.0.*
                  , metricsd-client == 0.1.*
                  , watchdog == 0.2.*
-                 , bitcoin-rpc == 0.3.*
+                 , bitcoin-rpc == 0.4.*
                  , mtgoxapi == 0.5.*
 
   if flag(development)

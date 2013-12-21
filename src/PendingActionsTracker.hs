@@ -774,7 +774,7 @@ checkBitcoindWallet bwHandles neededBTCAmount = do
         safetyMarginBTC = bcSafetyMarginBTC . bhConfig $ bwHandles
         watchdogLogger = bhWatchdogLogger bwHandles
     btcSystemBalance <- liftIO $ RPC.getBalanceR (Just watchdogLogger) rpcAuth
-                                                     confsNeededForSending True
+                                                     confsNeededForSending
     tryAssert "The server is currently busy rebalancing its reserves.\
               \ Please try again later."
               (neededBTCAmount + safetyMarginBTC
