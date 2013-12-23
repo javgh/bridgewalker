@@ -79,7 +79,10 @@ data WebsocketReply = WSStatus { _wrStatus :: ClientStatus }
                     | WSSendFailed { _wrRequestID :: Integer
                                    , _wrReason :: T.Text
                                    }
-                    | WSSendSuccessful { _wrRequestID :: Integer }
+                    | WSSendSuccessful { _wrRequestID :: Integer
+                                       , _wrSerializedTransactionM
+                                            :: Maybe RPC.SerializedTransaction
+                                       }
                     | WSPong { _wrExchangeRate :: Integer }
                     deriving (Show)
 
@@ -174,9 +177,14 @@ instance ToJSON WebsocketReply
                , "request_id" .= requestID
                , "reason" .= reason
                ]
-    toJSON (WSSendSuccessful requestID) =
+    toJSON (WSSendSuccessful requestID Nothing) =
         object [ "reply" .= ("send_successful" :: T.Text)
                , "request_id" .= requestID
+               ]
+    toJSON (WSSendSuccessful requestID (Just (RPC.SerializedTransaction tx))) =
+        object [ "reply" .= ("send_successful" :: T.Text)
+               , "request_id" .= requestID
+               , "tx" .= tx
                ]
     toJSON (WSPong rate) =
         object [ "reply" .= ("pong" :: T.Text)
@@ -289,9 +297,9 @@ continueAuthenticated combinationChan sink chHandle account =
                             ForwardQuoteToClient reqID (Just replyData) ->
                                 WS.textData . prepareWSReply $
                                                    WSQuote reqID replyData
-                            ForwardSuccessfulSend reqID ->
+                            ForwardSuccessfulSend reqID mTx ->
                                 WS.textData . prepareWSReply $
-                                   WSSendSuccessful reqID
+                                   WSSendSuccessful reqID mTx
                             ForwardFailedSend reqID reason ->
                                 WS.textData . prepareWSReply $
                                    WSSendFailed reqID reason

@@ -76,6 +76,8 @@ data WithdrawalAction = WithdrawalAction { _waAddress :: RPC.BitcoinAddress
 data SendPaymentAnswer = SendPaymentSuccessful
                             { _spaAccount :: BridgewalkerAccount
                             , _spaRequestID :: Integer
+                            , _spaSerializedTransactionM
+                                :: Maybe RPC.SerializedTransaction
                             }
                        | SendPaymentFailed
                             { _spaAccount :: BridgewalkerAccount
@@ -129,8 +131,8 @@ trackerLoop bwHandles chan =
                 return (touchedAccounts, sendPaymentAnswerM)
         case sendPaymentAnswerM of
             Nothing -> return ()
-            Just (SendPaymentSuccessful account requestID) ->
-                CH.signalSuccessfulSend chHandle account requestID
+            Just (SendPaymentSuccessful account requestID mTx) ->
+                CH.signalSuccessfulSend chHandle account requestID mTx
             Just (SendPaymentFailed account requestID reason) ->
                 CH.signalFailedSend chHandle account requestID reason
         CH.signalAccountUpdates chHandle touchedAccounts
@@ -534,8 +536,8 @@ sendPayment bwHandles account requestID address amountType expiration = do
             liftIO $ logger logMsg
             psSendPaymentAnswerM .= Just answer
             return RemoveAction
-        Right (touchedAccounts, adjustment) -> do
-            let answer = SendPaymentSuccessful account requestID
+        Right (touchedAccounts, adjustment, mTx) -> do
+            let answer = SendPaymentSuccessful account requestID mTx
             psSendPaymentAnswerM .= Just answer
             mapM_ addTouchedAccount touchedAccounts
             if adjustment == 0
@@ -568,14 +570,14 @@ sendPayment bwHandles account requestID address amountType expiration = do
                 Just otherAccount -> do
                     performInternalTransfer bwHandles account
                                             otherAccount amountType quoteData
-                    return ([account, otherAccount], 0)
+                    return ([account, otherAccount], 0, Nothing)
                 Nothing -> do
                     sendPaymentExternalPreparationChecks bwHandles quoteData
                     tryAssert busyMsg (now < expiration) -- one final check
                     convertFiat bwHandles account quoteData
                     let btcAmount = qdBTC quoteData
-                    _ <- sendBTC bwHandles account address btcAmount
-                    return ([account], (-1) * btcAmount)
+                    mTx <- sendBTC bwHandles account address btcAmount
+                    return ([account], (-1) * btcAmount, mTx)
     busyMsg = "The server is very busy at the moment. Please try again later."
 
 performInternalTransfer :: BridgewalkerHandles-> BridgewalkerAccount-> BridgewalkerAccount-> AmountType-> QuoteData-> EitherT String IO ()
@@ -613,11 +615,12 @@ performInternalTransfer bwHandles bwAccount bwOtherAccount amountType quoteData 
                                    (newUSDBalance, account)
     return ()
 
-sendBTC :: BridgewalkerHandles-> BridgewalkerAccount-> RPC.BitcoinAddress-> Integer-> EitherT String IO RPC.TransactionID
+sendBTC :: BridgewalkerHandles-> BridgewalkerAccount-> RPC.BitcoinAddress-> Integer-> EitherT String IO (Maybe RPC.SerializedTransaction)
 sendBTC bwHandles bwAccount address btcAmountToSend = do
     let rpcAuth = bcRPCAuth . bhConfig $ bwHandles
         account = bAccount bwAccount
         logger = bhAppLogger bwHandles
+        watchdogLogger = bhWatchdogLogger bwHandles
     rpcResult <- liftIO $ RPC.sendToAddress rpcAuth
                                     address (adjustAmount btcAmountToSend)
     case rpcResult of
@@ -649,7 +652,9 @@ sendBTC bwHandles bwAccount address btcAmountToSend = do
                                  , lcInfo = info
                                   }
             liftIO $ logger logMsg
-            return txID
+            mTx <- liftIO $ RPC.getRawTransactionR (Just watchdogLogger) rpcAuth
+                                                    txID
+            return mTx
 
 convertFiat :: BridgewalkerHandles-> BridgewalkerAccount -> QuoteData -> EitherT String IO ()
 convertFiat bwHandles bwAccount quoteData = do

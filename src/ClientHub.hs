@@ -141,10 +141,10 @@ clientHubLoop (ClientHubHandle chChan) bwHandles = do
                     Nothing -> return ()
                     Just client -> sendFailedSend client requestID reason
                 go clientSet addressCache accountCache exchangeStatus
-            SignalSuccessfulSend account requestID -> do
+            SignalSuccessfulSend account requestID mTx -> do
                 case I.getOne (clientSet @= account) of
                     Nothing -> return ()
-                    Just client -> sendSuccessfulSend client requestID
+                    Just client -> sendSuccessfulSend client requestID mTx
                 go clientSet addressCache accountCache exchangeStatus
             CheckTimeouts -> do
                 now <- getCurrentTime
@@ -258,9 +258,9 @@ signalAccountUpdates (ClientHubHandle chChan) accounts = do
     writeChan chChan $ SignalAccountUpdates accounts
     return ()
 
-signalSuccessfulSend :: ClientHubHandle -> BridgewalkerAccount -> Integer -> IO ()
-signalSuccessfulSend (ClientHubHandle chChan) account requestID = do
-    writeChan chChan $ SignalSuccessfulSend account requestID
+signalSuccessfulSend :: ClientHubHandle -> BridgewalkerAccount -> Integer -> Maybe RPC.SerializedTransaction -> IO ()
+signalSuccessfulSend (ClientHubHandle chChan) account requestID mTx = do
+    writeChan chChan $ SignalSuccessfulSend account requestID mTx
     return ()
 
 signalFailedSend :: ClientHubHandle-> BridgewalkerAccount -> Integer -> T.Text -> IO ()
@@ -319,9 +319,9 @@ sendPong client exchangeStatus =
             ExchangeAvailable rate -> rate
             ExchangeUnavailable -> 0)
 
-sendSuccessfulSend :: ClientData -> Integer -> IO ()
-sendSuccessfulSend client requestID =
-    writeChan (cdAnswerChan client) $ ForwardSuccessfulSend requestID
+sendSuccessfulSend :: ClientData -> Integer -> Maybe RPC.SerializedTransaction -> IO ()
+sendSuccessfulSend client requestID mTx =
+    writeChan (cdAnswerChan client) $ ForwardSuccessfulSend requestID mTx
 
 sendFailedSend :: ClientData -> Integer -> T.Text -> IO ()
 sendFailedSend client requestID reason =

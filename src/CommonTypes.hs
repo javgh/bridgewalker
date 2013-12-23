@@ -83,7 +83,8 @@ data BridgewalkerAction = DepositAction { baAmount :: Integer
 
 data ClientHubAnswer = ForwardStatusToClient ClientStatus
                      | ForwardQuoteToClient Integer (Maybe QuoteData)
-                     | ForwardSuccessfulSend Integer
+                     | ForwardSuccessfulSend
+                            Integer (Maybe RPC.SerializedTransaction)
                      | ForwardFailedSend Integer T.Text
                      | SendPongToClient Integer
                      | CloseConnectionWithClient
@@ -114,6 +115,8 @@ data ClientHubCommand = RegisterClient { chcAccount :: BridgewalkerAccount
                       | SignalSuccessfulSend
                             { chcAccount :: BridgewalkerAccount
                             , chcRequestID :: Integer
+                            , chcSerializedTransactionM
+                                :: Maybe RPC.SerializedTransaction
                             }
                       | SignalFailedSend
                             { chcAccount :: BridgewalkerAccount
