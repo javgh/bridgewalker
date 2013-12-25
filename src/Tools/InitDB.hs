@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Tools.InitDB
     ( initDB
-    , resetPendingActionsState
+    , resetFilteredEventTaskState
     ) where
 
 import Control.Monad
@@ -39,13 +39,6 @@ initializePendingActionsState conn =
                 "insert into states values (?, ?)"
                 ("pendingactionsstate" :: B.ByteString, paStateStr)
 
-resetPendingActionsState :: Connection -> IO ()
-resetPendingActionsState conn =
-    let paStateStr = B64.encode . encode $ initialPendingActionsState
-    in void $ execute conn
-                "update states set state=? where key=?"
-                (paStateStr, "pendingactionsstate" :: B.ByteString)
-
 createTableAccounts :: Connection -> IO ()
 createTableAccounts conn = do
     _ <- execute_ conn
@@ -73,10 +66,17 @@ createTableAddresses conn = do
                        \ on addresses (btc_address)"
     return ()
 
-
 initDB :: IO ()
 initDB = connectPostgreSQL myConnectInfo >>= \conn -> do
     createTableStates conn
     createTableAccounts conn
     createTableAddresses conn
     return ()
+
+resetFilteredEventTaskState :: IO ()
+resetFilteredEventTaskState =
+    connectPostgreSQL myConnectInfo >>= \conn ->
+        let fetStateStr = B64.encode . encode $ initialFilteredEventTaskState
+        in void $ execute conn
+                    "update states set state=? where key=?"
+                    (fetStateStr, "filteredeventtaskstate" :: B.ByteString)

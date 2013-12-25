@@ -105,16 +105,6 @@ initBridgewalkerHandles connectInfo = do
                         { lcInfo = formatWatchdogError taskErr delay }
         in logger logMsg
 
---justCatchUp :: BridgewalkerHandles -> IO ()
---justCatchUp bwHandles =
---    let fbetHandle = bhFilteredBitcoinEventTaskHandle bwHandles
---        dbConn = bhDBConnFBET bwHandles
---        dbLock = bhDBWriteLock bwHandles
---    in forever $ do
---        (fetState, _) <- waitForFilteredBitcoinEvents fbetHandle
---        withSerialTransaction dbLock dbConn $
---            writeBitcoindStateToDB dbConn fetState
-
 actOnDeposits :: BridgewalkerHandles -> IO ()
 actOnDeposits bwHandles = do
     let fbetHandle = bhFilteredBitcoinEventTaskHandle bwHandles

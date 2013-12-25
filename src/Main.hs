@@ -28,6 +28,7 @@ import           System.IO
 import           Bridgewalker
 import           Config
 import           SnapSite
+import           Tools.FastForwardDB
 import           Tools.InitDB
 
 #ifdef DEVELOPMENT
@@ -73,9 +74,19 @@ import           Snap.Loader.Static
 main :: IO ()
 main = do
     args <- getArgs
-    if (args == ["--initdb"])
-        then putStrLn "Initializing Bridgewalker database tables..." >> initDB
-        else bridgewalker
+    case args of
+        ["--initdb"] -> do
+            putStrLn "Initializing Bridgewalker database tables..."
+            initDB
+        ["--reset-filteredeventtaskstate"] -> do
+            putStrLn "Resetting state for filtered event task..."
+            resetFilteredEventTaskState
+        ["--fastforwarddb"] -> do
+            putStrLn $ "Fast forwarding through transactions" ++
+                       " without processing them..."
+            bwHandles <- initBridgewalker
+            fastForwardDB bwHandles
+        _ -> bridgewalker
 
 bridgewalker :: IO ()
 bridgewalker = do
