@@ -120,6 +120,10 @@ readConfig = do
                                                  \ enough to deal with\
                                                  \ largest possible order."
                                                  , "")
+            when (maximumOrderBTC < mtgoxMinimumOrderBTC) $
+                throwError (OtherProblem "Maximum BTC order needs to be at\
+                                         \ least as large as Mt.Gox minimum\
+                                         \ BTC order.", "")
             return BridgewalkerConfig
                       { bcRPCAuth = rpcAuth
                       , bcMtGoxCredentials =
