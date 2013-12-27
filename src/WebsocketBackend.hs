@@ -108,7 +108,8 @@ instance FromJSON WebsocketCommand
                 _ -> mzero
         Just "send_payment" -> do
             i <- o .: "request_id"
-            addr <- o .: "address" :: Parser T.Text
+            addrRaw <- o .: "address" :: Parser T.Text
+            let addr = T.strip addrRaw
             t <- o .: "type" :: Parser T.Text
             amount <- o .: "amount"
             when (amount < 0) mzero  -- only accept positive values
