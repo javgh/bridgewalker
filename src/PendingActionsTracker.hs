@@ -569,7 +569,7 @@ sendPayment bwHandles account requestID address amountType expiration = do
             case otherAccountM of
                 Just otherAccount -> do
                     performInternalTransfer bwHandles account
-                                            otherAccount amountType quoteData
+                                            otherAccount quoteData
                     return ([account, otherAccount], 0, Nothing)
                 Nothing -> do
                     sendPaymentExternalPreparationChecks bwHandles quoteData
@@ -580,8 +580,8 @@ sendPayment bwHandles account requestID address amountType expiration = do
                     return ([account], (-1) * btcAmount, mTx)
     busyMsg = "The server is very busy at the moment. Please try again later."
 
-performInternalTransfer :: BridgewalkerHandles-> BridgewalkerAccount-> BridgewalkerAccount-> AmountType-> QuoteData-> EitherT String IO ()
-performInternalTransfer bwHandles bwAccount bwOtherAccount amountType quoteData = do
+performInternalTransfer :: BridgewalkerHandles-> BridgewalkerAccount-> BridgewalkerAccount-> QuoteData-> EitherT String IO ()
+performInternalTransfer bwHandles bwAccount bwOtherAccount quoteData = do
     let usdAmount = qdUSDRecipient quoteData
         dbConn = bhDBConnPAT bwHandles
         logger = bhAppLogger bwHandles
