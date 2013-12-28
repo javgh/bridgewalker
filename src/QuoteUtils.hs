@@ -11,6 +11,8 @@ import Control.Monad.IO.Class
 import Network.MtGoxAPI
 import Network.MtGoxAPI.DepthStore
 
+import qualified Data.Text as T
+
 import CommonTypes
 import Config
 import DbUtils
@@ -32,20 +34,41 @@ compileSimpleQuoteBTCSell bwHandles btcAmount = runAsQuoteCompilation $ do
     usdAmount <- simulateBTCSell' bwHandles btcAmount
     return $ addFee usdAmount (-1 * getActualFee bwHandles)
 
-compileQuote :: BridgewalkerHandles-> BridgewalkerAccount -> AmountType -> IO (QuoteCompilation QuoteData)
-compileQuote bwHandles account amountType = runAsQuoteCompilation $ do
+compileQuote :: BridgewalkerHandles-> BridgewalkerAccount -> Maybe T.Text -> AmountType -> IO (QuoteCompilation QuoteData)
+compileQuote bwHandles account mAddress amountType = runAsQuoteCompilation $ do
     let typicalTxFee = bcTypicalTxFee . bhConfig $ bwHandles
         actualFee = getActualFee bwHandles
         dbConn = bhDBConnCH bwHandles
     -- some preparation
-    isSmallTx <- needsSmallTxFund bwHandles amountType
-    feeOverheadUSD <- if isSmallTx
-        then do
-            usdAmount <- simulateBTCBuy' bwHandles typicalTxFee
-            return $ addFee usdAmount actualFee
-        else return 0
+    otherAccountM <- case mAddress of
+                        Nothing -> return Nothing
+                        Just address ->
+                            liftIO $ getAccountByAddress dbConn address
+    let isInternalTransfer = isJust otherAccountM
+    txFeeUSD <- do
+        usdAmount <- simulateBTCBuy' bwHandles typicalTxFee
+        return $ addFee usdAmount actualFee
     -- main calculation
-    pqd <- case amountType of
+    pqdInternal <- case amountType of
+        AmountBasedOnBTC btc -> do
+            usdForRecipient <- simulateBTCSell' bwHandles btc
+            return PureQuoteData { pqdBTC = btc
+                                 , pqdUSDRecipient = usdForRecipient
+                                 , pqdUSDAccount = usdForRecipient
+                                 }
+        AmountBasedOnUSDBeforeFees usdForRecipient -> do
+            btc <- simulateUSDBuy' bwHandles usdForRecipient
+            return PureQuoteData { pqdBTC = btc
+                                 , pqdUSDRecipient = usdForRecipient
+                                 , pqdUSDAccount = usdForRecipient
+                                 }
+        AmountBasedOnUSDAfterFees usdFromOurAccount -> do
+            btc <- simulateUSDBuy' bwHandles usdFromOurAccount
+            return PureQuoteData { pqdBTC = btc
+                                 , pqdUSDRecipient = usdFromOurAccount
+                                 , pqdUSDAccount = usdFromOurAccount
+                                 }
+    pqdExternal <- case amountType of
         AmountBasedOnBTC btc -> do
             usdNeeded <- simulateBTCBuy' bwHandles btc
             let usdNeededWithFee = addFee usdNeeded actualFee
@@ -53,7 +76,7 @@ compileQuote bwHandles account amountType = runAsQuoteCompilation $ do
             return PureQuoteData { pqdBTC = btc
                                  , pqdUSDRecipient = usdForRecipient
                                  , pqdUSDAccount = usdNeededWithFee
-                                                      + feeOverheadUSD
+                                                      + txFeeUSD
                                  }
         AmountBasedOnUSDBeforeFees usdForRecipient -> do
             btc <- simulateUSDBuy' bwHandles usdForRecipient
@@ -62,38 +85,34 @@ compileQuote bwHandles account amountType = runAsQuoteCompilation $ do
             return PureQuoteData { pqdBTC = btc
                                  , pqdUSDRecipient = usdForRecipient
                                  , pqdUSDAccount = usdNeededWithFee
-                                                      + feeOverheadUSD
+                                                      + txFeeUSD
                                  }
         AmountBasedOnUSDAfterFees usdFromOurAccount -> do
             let usdBeforeFee =
-                    subtractFee (usdFromOurAccount - feeOverheadUSD) actualFee
-            btc <- simulateUSDSell' bwHandles usdBeforeFee
-            usdForRecipient <- simulateBTCSell' bwHandles btc
-            return PureQuoteData { pqdBTC = btc
-                                 , pqdUSDRecipient = usdForRecipient
-                                 , pqdUSDAccount = usdFromOurAccount
-                                 }
+                    subtractFee (usdFromOurAccount - txFeeUSD) actualFee
+            if usdBeforeFee > 0
+                then do
+                    btc <- simulateUSDSell' bwHandles usdBeforeFee
+                    usdForRecipient <- simulateBTCSell' bwHandles btc
+                    return PureQuoteData { pqdBTC = btc
+                                         , pqdUSDRecipient = usdForRecipient
+                                         , pqdUSDAccount = usdFromOurAccount
+                                         }
+                else
+                    return PureQuoteData { pqdBTC = 0
+                                         , pqdUSDRecipient = 0
+                                         , pqdUSDAccount = usdFromOurAccount
+                                         }
+    let pqd = if isInternalTransfer
+                then pqdInternal
+                else pqdExternal
     -- fill in some additional infos
     usdBalance <- liftIO $ getUSDBalance dbConn (bAccount account)
     return QuoteData { qdBTC = pqdBTC pqd
                      , qdUSDRecipient = pqdUSDRecipient pqd
                      , qdUSDAccount = pqdUSDAccount pqd
                      , qdSufficientBalance = pqdUSDAccount pqd <= usdBalance
-                     , qdNeedsSmallTxFund = isSmallTx
                      }
-
-needsSmallTxFund :: MonadIO m =>BridgewalkerHandles -> AmountType -> EitherT QCError m Bool
-needsSmallTxFund bwHandles amountType = do
-    let minimumOrderBTC = bcMtGoxMinimumOrderBTC . bhConfig $ bwHandles
-    btcAmount <- case amountType of
-                    AmountBasedOnBTC btc -> return btc
-                    AmountBasedOnUSDBeforeFees usd ->
-                        simulateUSDBuy' bwHandles usd
-                    AmountBasedOnUSDAfterFees usd ->
-                        let actualFee = getActualFee bwHandles
-                            usdBeforeFee = subtractFee usd actualFee
-                        in simulateUSDSell' bwHandles usdBeforeFee
-    return $ btcAmount < minimumOrderBTC
 
 runAsQuoteCompilation :: Monad m => EitherT QCError m a -> m (QuoteCompilation a)
 runAsQuoteCompilation f = do

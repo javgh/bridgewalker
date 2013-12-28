@@ -99,11 +99,12 @@ clientHubLoop (ClientHubHandle chChan) bwHandles = do
                         sendClientStatus bwHandles
                             accountCache exchangeStatus client
                 go clientSet addressCache accountCache exchangeStatus
-            RequestQuote account requestID amountType -> do
+            RequestQuote account requestID mAddress amountType -> do
                 case I.getOne (clientSet @= account) of
                     Nothing -> return ()
                     Just client ->
-                        sendQuote bwHandles client account requestID amountType
+                        sendQuote bwHandles client account
+                                    requestID mAddress amountType
                 go clientSet addressCache accountCache exchangeStatus
             SendPayment account requestID address amountType -> do
                 sendPaymentToPAT bwHandles account requestID address amountType
@@ -234,9 +235,9 @@ requestClientStatus (ClientHubHandle chChan) account = do
     writeChan chChan $ RequestClientStatus account
     return ()
 
-requestQuote :: ClientHubHandle -> BridgewalkerAccount -> Integer -> AmountType -> IO ()
-requestQuote (ClientHubHandle chChan) account requestID amountType = do
-    writeChan chChan $ RequestQuote account requestID amountType
+requestQuote :: ClientHubHandle -> BridgewalkerAccount -> Integer -> Maybe T.Text -> AmountType -> IO ()
+requestQuote (ClientHubHandle chChan) account requestID mAddress amountType = do
+    writeChan chChan $ RequestQuote account requestID mAddress amountType
     return ()
 
 sendPayment :: ClientHubHandle -> BridgewalkerAccount -> Integer -> T.Text -> AmountType -> IO ()
@@ -303,10 +304,10 @@ sendClientStatus bwHandles accountCache exchangeStatus client = do
                               }
     writeChan answerChan $ ForwardStatusToClient status
 
-sendQuote :: BridgewalkerHandles-> ClientData-> BridgewalkerAccount-> Integer-> AmountType-> IO ()
-sendQuote bwHandles client account requestID amountType = do
+sendQuote :: BridgewalkerHandles-> ClientData-> BridgewalkerAccount-> Integer-> Maybe T.Text -> AmountType-> IO ()
+sendQuote bwHandles client account requestID mAddress amountType = do
     let answerChan = cdAnswerChan client
-    qc <- compileQuote bwHandles account amountType
+    qc <- compileQuote bwHandles account mAddress amountType
     let replyData = case qc of
                         SuccessfulQuote quote -> Just quote
                         _ -> Nothing

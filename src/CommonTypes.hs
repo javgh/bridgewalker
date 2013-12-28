@@ -99,6 +99,7 @@ data ClientHubCommand = RegisterClient { chcAccount :: BridgewalkerAccount
                                                     BridgewalkerAccount }
                       | RequestQuote { chcAccount :: BridgewalkerAccount
                                      , chcRequestID :: Integer
+                                     , chcAddressM :: Maybe T.Text
                                      , chcAmountType :: AmountType
                                      }
                       | SendPayment { chcAccount :: BridgewalkerAccount
@@ -146,7 +147,6 @@ data QuoteData = QuoteData { qdBTC :: Integer
                            , qdUSDRecipient :: Integer
                            , qdUSDAccount :: Integer
                            , qdSufficientBalance :: Bool
-                           , qdNeedsSmallTxFund :: Bool
                            }
                  deriving (Show)
 

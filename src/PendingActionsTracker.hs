@@ -582,13 +582,7 @@ sendPayment bwHandles account requestID address amountType expiration = do
 
 performInternalTransfer :: BridgewalkerHandles-> BridgewalkerAccount-> BridgewalkerAccount-> AmountType-> QuoteData-> EitherT String IO ()
 performInternalTransfer bwHandles bwAccount bwOtherAccount amountType quoteData = do
-    let usdAmount = case amountType of
-                        AmountBasedOnUSDAfterFees _ -> qdUSDAccount quoteData
-                            -- the value of qdUSDRecipient takes fees into
-                            -- account, that do not apply here; therefore use
-                            -- the amount given by the user, which is
-                            -- qdUSDAccount
-                        _ -> qdUSDRecipient quoteData
+    let usdAmount = qdUSDRecipient quoteData
         dbConn = bhDBConnPAT bwHandles
         logger = bhAppLogger bwHandles
         account = bAccount bwAccount
@@ -687,8 +681,9 @@ debitUSDFromAccount bwHandles bwAccount usdAmount = do
 
 sendPaymentPreparationChecks :: BridgewalkerHandles-> BridgewalkerAccount-> RPC.BitcoinAddress-> AmountType-> EitherT String IO QuoteData
 sendPaymentPreparationChecks bwHandles account address amountType = do
+    let mAddress = Just (adjustAddr address)
     _ <- checkAddress bwHandles address
-    qc <- liftIO $ compileQuote bwHandles account amountType
+    qc <- liftIO $ compileQuote bwHandles account mAddress amountType
     quoteData <- case qc of
                     SuccessfulQuote qd -> return qd
                     QuoteCompilationError HadNotEnoughDepth ->
@@ -719,7 +714,8 @@ checkOrderRange :: QuoteData -> BridgewalkerHandles -> EitherT String IO ()
 checkOrderRange quoteData bwHandles = do
     let maximumOrderBTC = bcMaximumOrderBTC . bhConfig $ bwHandles
         maximumOrderBTCStr = formatBTCAmount maximumOrderBTC ++ " BTC"
-        minimumOrderBTC = 1 :: Integer
+        minimumOrderBTC = 5500 :: Integer
+            -- 0.00005430 BTC mentioned in 0.8.2 release notes
         minimumOrderBTCStr = formatBTCAmount minimumOrderBTC ++ " BTC"
         btcAmount = qdBTC quoteData
     tryAssert ("Currently the maximum transaction size is "

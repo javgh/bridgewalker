@@ -53,6 +53,7 @@ data WebsocketCommand = WSRequestVersion { _wcClientVersion :: T.Text }
                                 }
                       | WSRequestStatus
                       | WSRequestQuote { _wcRequestID :: Integer
+                                       , _wcAddressM :: Maybe T.Text
                                        , _wcAmountType :: AmountType
                                        }
                       | WSSendPayment { _wcRequestID :: Integer
@@ -95,16 +96,18 @@ instance FromJSON WebsocketCommand
         Just "request_status" -> return WSRequestStatus
         Just "request_quote" -> do
             i <- o .: "request_id"
+            mARaw <- o .:? "address"
+            let mA = fmap T.strip mARaw
             t <- o .: "type" :: Parser T.Text
             a <- o .: "amount"
             when (a < 0) mzero  -- only accept positive values
             case t of
                 "amount_based_on_btc" ->
-                    return $ WSRequestQuote i (AmountBasedOnBTC a)
+                    return $ WSRequestQuote i mA (AmountBasedOnBTC a)
                 "amount_based_on_usd_before_fees" ->
-                    return $ WSRequestQuote i (AmountBasedOnUSDBeforeFees a)
+                    return $ WSRequestQuote i mA (AmountBasedOnUSDBeforeFees a)
                 "amount_based_on_usd_after_fees" ->
-                    return $ WSRequestQuote i (AmountBasedOnUSDAfterFees a)
+                    return $ WSRequestQuote i mA (AmountBasedOnUSDAfterFees a)
                 _ -> mzero
         Just "send_payment" -> do
             i <- o .: "request_id"
@@ -279,8 +282,8 @@ continueAuthenticated combinationChan sink chHandle account =
             MessageFromClient msg -> case msg of
                 WSRequestStatus -> requestClientStatus chHandle account
                 WSPing -> receivedPing chHandle account
-                WSRequestQuote reqID amountType ->
-                    requestQuote chHandle account reqID amountType
+                WSRequestQuote reqID mAddress amountType ->
+                    requestQuote chHandle account reqID mAddress amountType
                 WSSendPayment reqID address amountType ->
                     sendPayment chHandle account reqID address amountType
                 _ -> let wsData = WS.textData . prepareWSReply $
