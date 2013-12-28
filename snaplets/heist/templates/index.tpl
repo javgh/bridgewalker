@@ -249,7 +249,7 @@
                 <a href="https://bitpay.com/">BitPay</a> and
                 <a href="https://coinbase.com/">Coinbase</a> offer protection
                 from exchange rate risk. Bridgewalker is the counterpart for
-                customers, offering Euro-denominated accounts with easy access
+                customers, offering euro-denominated accounts with easy access
                 to the Bitcoin network.
                 </p>
 
