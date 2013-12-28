@@ -42,10 +42,9 @@
                     in the future as volume increases.
                 </li>
                 <li>
-                    <h2><i class="icon-forward"></i> Instant transactions</h2>
-                    Support for the
-                    <a href="https://en.bitcoin.it/wiki/Green_address">green address approach</a>
-                    to instant transactions.
+                    <h2><i class="icon-share-alt"></i> Free off-chain transactions</h2>
+                    Transactions between Bridgewalker users are free and
+                    instantaneous.
                 </li>
                 <li>
                     <h2><i class="icon-wrench"></i> Beta software</h2>
@@ -93,7 +92,8 @@
                         Full accounts are coming soon, with more functionality,
                         such as setting an extra PIN for additional security and
                         being able to create backups. Given the current limits of
-                        guest accounts and beta state of the software, please
+                        guest accounts (which offer only rudimentary backup
+                        functionality) and beta state of the software, please
                         keep only small amounts in your account.
                         </p>
                     </li>
@@ -110,17 +110,8 @@
                         of your account, both in text form as well as a
                         scannable QR code. Transactions to this address will
                         require a number of confirmations - typically three -
-                        after which they will be exchange for Euros at current
+                        after which they will be exchanged for Euros at the current
                         market price and credited to your account.
-                        </p>
-
-                        <p>
-                        Bridgewalker also has support for
-                        <a href="https://en.bitcoin.it/wiki/Green_address">green addresses</a>.
-                        To speed up the deposit process, send from one of the
-                        recognized green addresses. Currently this is only the
-                        case for Mt.Gox (use their option "Use a Green
-                        Address").
                         </p>
                     </li>
 
@@ -133,10 +124,11 @@
 
                         <p>
                         Use the tab "Send" to make a Bitcoin payment. Either
-                        enter the recipient's Bitcoin address or scan it from a
-                        QR code. When entering the amount, you can choose
-                        between specifying it in bitcoins or in Euros and
-                        Bridgewalker will do the currency conversion for you.
+                        enter the recipient's Bitcoin address manually, scan it
+                        from a QR code or receive it via NFC. When entering the
+                        amount, you can choose between specifying it in bitcoins
+                        or in Euros and Bridgewalker will do the currency
+                        conversion for you.
                         </p>
 
                         <p>
@@ -257,7 +249,8 @@
                 <a href="https://bitpay.com/">BitPay</a> and
                 <a href="https://coinbase.com/">Coinbase</a> offer protection
                 from exchange rate risk. Bridgewalker is the counterpart for
-                customers, offering exchange rate adjusted Bitcoin wallets.
+                customers, offering Euro-denominated accounts with easy access
+                to the Bitcoin network.
                 </p>
 
                 <p>
@@ -302,8 +295,17 @@
                 sender to not attempt to double spend, the recipient may treat
                 the funds as confirmed the moment they arrive. See the
                 <a href="https://en.bitcoin.it/wiki/Green_address">wiki page</a>
-                for more details. Bridgewalker's green address is currently
-                1MAxx46Dp3tFw933PxPwEYYGCpxYda2pyH.
+                for more details.
+                </p>
+
+                <p>
+                Bridgewalker has support for green addresses in theory, although
+                currently (December 2013) no specific addresses are configured.
+                Previously Mt.Gox Bitcoin transactions were recognized in this
+                manner, but Mt.Gox discontinued its support for green addresses.
+                For the time being, outgoing Bridgewalker transactions also no
+                longer contain green addresses. Previously the address
+                1MAxx46Dp3tFw933PxPwEYYGCpxYda2pyH was used for this purpose.
                 </p>
 
                 <h3>Q: Is Bridgewalker compatible with SatoshiDice?</h3>
