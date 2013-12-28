@@ -37,7 +37,7 @@ acceptAfterThreeConfs txHeader = thConfirmations txHeader >= 3
 periodicRebalancing :: RebalancerHandle -> IO ()
 periodicRebalancing rbHandle = forever $ do
     runRebalancer rbHandle
-    threadDelay $ 5 * 10 ^ (6 :: Integer)
+    threadDelay $ 30 * 10 ^ (6 :: Integer)
 
 initBridgewalkerHandles :: B.ByteString -> IO BridgewalkerHandles
 initBridgewalkerHandles connectInfo = do
