@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+ <title>Blog</title>
+ <link href="https://www.bridgewalkerapp.com/blog/atom.xml" rel="self"/>
+ <link href="https://www.bridgewalkerapp.com/blog/"/>
+ <updated>2013-12-29T22:14:24+01:00</updated>
+ <id>https://www.bridgewalkerapp.com/blog</id>
+ <author>
+   <name>Jan Vornberger</name>
+   <email>jan@uos.de</email>
+ </author>
+
+ 
+ <entry>
+   <title>Bridgewalker acquired by Hive</title>
+   <link href="https://www.bridgewalkerapp.com/blog/2013/12/29/hive-acquisition/"/>
+   <updated>2013-12-29T00:00:00+01:00</updated>
+   <id>https://www.bridgewalkerapp.com/blog/2013/12/29/hive-acquisition</id>
+   <content type="html">&lt;p&gt;Welcome to the Bridgewalker Blog! The news is already a couple of weeks old, but
+I would like to use this first post to report that Bridgewalker has been
+acquired be &lt;a href=&quot;http://www.grabhive.com/&quot;&gt;Hive&lt;/a&gt;!&lt;/p&gt;
+
+&lt;p&gt;I was lucky to meet Wendell Davis at the Amsterdam Bitcoin conference in
+September and we had some great conversations about Bitcoin wallets and the
+Bitcoin ecosystem in general. So when he later approached me with the idea of
+Hive acquiring Bridgewalker and me joining the team, it did not take much
+convincing for me to decide that this was a great match and opportunity.&lt;/p&gt;
+
+&lt;p&gt;I am very excited about joining the Hive team and looking forward to building
+some great products. I will be focusing initally on helping out with the Android
+port of Hive, which will put Bridgewalker a little bit on the back burner for
+the time being. But it will continue to operate and I am looking forward to
+explore future possibilites of integerating it with the rest of Hive's
+offerings.&lt;/p&gt;
+
+&lt;p&gt;Watch this space for some cool additional announcements resulting from the
+acquisition!&lt;/p&gt;
+
+&lt;p&gt;Here is the &lt;a href=&quot;https://bitcointalk.org/index.php?topic=334383.0&quot;&gt;original
+announcement&lt;/a&gt;.&lt;/p&gt;
+</content>
+ </entry>
+ 
+
+</feed>

@@ -70,6 +70,7 @@
                 <li class="tabs-selected"><a href="#tab-1">Tutorial</a></li>
                 <li><a href="#tab-2">Screenshots</a></li>
                 <li><a href="#tab-3">FAQ</a></li>
+                <li><a class="blog-redirect" href="#tab-4">Blog</a></li>
             </ul>
 
             <div id="tab-1">
@@ -337,8 +338,11 @@
                 API at some point (and/or open source the Android client), which
                 would also allow other developers to step in.
                 </p>
-            </div><!-- /tab-2 -->
+            </div><!-- /tab-3 -->
 
+            <div id="tab-4">
+                Read more about Bridgewalker on its <a href="/blog">blog</a>.
+            </div><!-- /tab-4 -->
         </div><!-- /content -->
 
         <div id="sidebar">

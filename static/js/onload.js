@@ -2,9 +2,15 @@ $(document).ready(function() {
 
     // Configure the navigation tabs
     $('#content').tabs({
-        fxSlide: false, 
-        fxFade: true, 
-        fxSpeed: 'fast'
+        fxSlide: false,
+        fxFade: true,
+        fxSpeed: 'fast',
+        onClick: function(newTab, content, oldTab) {
+            if ($(newTab).hasClass('blog-redirect')){
+                window.location.href = '/blog';
+                return false;
+            }
+        }
     });
 
     // Activate Tipsy tooltip effect
