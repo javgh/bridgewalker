@@ -108,9 +108,9 @@ runRebalancer' :: Logger-> Maybe WatchdogLogger-> MetricsdClientHandle-> RPCAuth
 runRebalancer' appLogger mLogger mcHandle rpcAuth mtgoxHandles safetyMargin = do
     values <- runMaybeT $ do
         tB <- MaybeT readTargetBalance
-        zCB <- liftIO $ btcAmount <$> getBalanceR mLogger rpcAuth 0
+        zCB <- liftIO $ btcAmount <$> getBalanceR mLogger rpcAuth 0 True
         eCB <- liftIO $ btcAmount <$> getBalanceR mLogger rpcAuth
-                                                    confsNeededForSending
+                                                    confsNeededForSending True
         privateInfo <- hushT . EitherT $ getPrivateInfoR mtgoxHandles
         let mB = piBtcBalance privateInfo
             usdB = piUsdBalance privateInfo
