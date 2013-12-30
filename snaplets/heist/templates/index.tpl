@@ -304,9 +304,8 @@
                 currently (December 2013) no specific addresses are configured.
                 Previously Mt.Gox Bitcoin transactions were recognized in this
                 manner, but Mt.Gox discontinued its support for green addresses.
-                For the time being, outgoing Bridgewalker transactions also no
-                longer contain green addresses. Previously the address
-                1MAxx46Dp3tFw933PxPwEYYGCpxYda2pyH was used for this purpose.
+                All outgoing Bridgewalker transactions can be recognized by the
+                green address 1MAxx46Dp3tFw933PxPwEYYGCpxYda2pyH.
                 </p>
 
                 <h3>Q: Is Bridgewalker compatible with SatoshiDice?</h3>
