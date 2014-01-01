@@ -120,7 +120,7 @@ are always represented as integers. Fiat amounts need to be divided by 10 ^ 5 to
 arrive at the correct amount (in the example above, the exchange rate is
 101.25165 EUR/BTC). Bitcoin amounts are in Satoshis. Note that the API currently
 still uses USD in many field names. The reason for this is, that the switch to
-Euro has only partially been implemented yet. For the moment all USD fields
+euro has only partially been implemented yet. For the moment all USD fields
 simply need to be interpreted as referring to EUR amounts.</p>
 
 <p>The server will send this status description whenever there are any changes to
@@ -201,7 +201,7 @@ given in Satoshis. Euro amounts needed to be divided by 10 ^ 5 to arrive at the
 correct amount (i.e. 1 EUR is represented as 100000).</p>
 
 <p>Note that the API currently still uses USD in many field names. The reason for
-this is, that the switch to Euro has only partially been implemented yet. For
+this is, that the switch to euro has only partially been implemented yet. For
 the moment all USD fields simply need to be interpreted as referring to EUR
 amounts.</p>
 
@@ -295,7 +295,7 @@ unauthenticated.</p>
 exchange (for now Mt.Gox) exists. If this is not the case, then outgoing
 transactions will fail.</li>
 <li><code>btc_in</code>: Amount of fully confirmed bitcoins, that are not yet exchanged for
-Euros. The Android client lists this amount as "x BTC waiting to be
+euros. The Android client lists this amount as "x BTC waiting to be
 exchanged."</li>
 <li><code>primary_btc_address</code>: Main Bitcoin address of the account</li>
 <li><code>usd_balance</code>: Euro balance</li>
@@ -354,17 +354,17 @@ request id. The server will tag the reply with the same number.</li>
 <ul>
 <li><code>amount_based_on_btc</code>: The user wants to send out a specific amount of
 bitcoins. The amount field specifies this amount.</li>
-<li><code>amount_based_on_usd_before_fees</code>: The user wants to send a specific Euro
+<li><code>amount_based_on_usd_before_fees</code>: The user wants to send a specific euro
 amount to a recipient. The server will calculate an equivalent Bitcoin
 amount and also the fees, which the user will have to pay in addition.</li>
 <li><code>amount_based_on_usd_after_fees</code>: The user wants to spend no more than
-a specific Euro amount. The server will pick the outgoing Bitcoin amount in
-such a way, that its Euro equivalent plus any occuring fees add up to the
+a specific euro amount. The server will pick the outgoing Bitcoin amount in
+such a way, that its euro equivalent plus any occuring fees add up to the
 amount given by the user.</li>
 </ul>
 </li>
 <li><code>amount</code>: The amount to be used in all calculations. This is either
-interpreted as Satoshis or as an Euro amount * 10 ^ 5, depending on what type
+interpreted as Satoshis or as an euro amount * 10 ^ 5, depending on what type
 of request is being made.</li>
 </ul>
 
@@ -385,8 +385,8 @@ structure. All three of the following fields are present:</p>
 
 <ul>
 <li><code>btc</code>: The amount of bitcoins that will be sent out.</li>
-<li><code>usd_recipient</code>: The equivalent Euro amount for this Bitcoin payment.</li>
-<li><code>usd_account</code>: The Euro amount which will be deducted from the user's
+<li><code>usd_recipient</code>: The equivalent euro amount for this Bitcoin payment.</li>
+<li><code>usd_account</code>: The euro amount which will be deducted from the user's
 account. So <code>usd_account</code> - <code>usd_recipient</code> is essential the fee the user
 is paying.</li>
 </ul>
@@ -421,7 +421,7 @@ large, that it exceeds the sum of available offers at the exchange.</p>
 
 <p>The field <code>type</code> accepts the same options, as the quote request command (see
 above) and the <code>amount</code> field is interpreted accordingly (either as a Bitcoin
-amount or a Euro amount).</p>
+amount or a euro amount).</p>
 
 <p>Reply in case of success:</p>
 

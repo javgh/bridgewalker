@@ -75,7 +75,7 @@ are always represented as integers. Fiat amounts need to be divided by 10 ^ 5 to
 arrive at the correct amount (in the example above, the exchange rate is
 101.25165 EUR/BTC). Bitcoin amounts are in Satoshis. Note that the API currently
 still uses USD in many field names. The reason for this is, that the switch to
-Euro has only partially been implemented yet. For the moment all USD fields
+euro has only partially been implemented yet. For the moment all USD fields
 simply need to be interpreted as referring to EUR amounts.
 
 The server will send this status description whenever there are any changes to
@@ -152,7 +152,7 @@ given in Satoshis. Euro amounts needed to be divided by 10 ^ 5 to arrive at the
 correct amount (i.e. 1 EUR is represented as 100000).
 
 Note that the API currently still uses USD in many field names. The reason for
-this is, that the switch to Euro has only partially been implemented yet. For
+this is, that the switch to euro has only partially been implemented yet. For
 the moment all USD fields simply need to be interpreted as referring to EUR
 amounts.
 
@@ -236,7 +236,7 @@ Description of fields:
    exchange (for now Mt.Gox) exists. If this is not the case, then outgoing
    transactions will fail.
  * `btc_in`: Amount of fully confirmed bitcoins, that are not yet exchanged for
-   Euros. The Android client lists this amount as "x BTC waiting to be
+   euros. The Android client lists this amount as "x BTC waiting to be
    exchanged."
  * `primary_btc_address`: Main Bitcoin address of the account
  * `usd_balance`: Euro balance
@@ -287,15 +287,15 @@ Description of fields:
  * `type`: There are three different types of quotes:
    * `amount_based_on_btc`: The user wants to send out a specific amount of
      bitcoins. The amount field specifies this amount.
-   * `amount_based_on_usd_before_fees`: The user wants to send a specific Euro
+   * `amount_based_on_usd_before_fees`: The user wants to send a specific euro
      amount to a recipient. The server will calculate an equivalent Bitcoin
      amount and also the fees, which the user will have to pay in addition.
    * `amount_based_on_usd_after_fees`: The user wants to spend no more than
-     a specific Euro amount. The server will pick the outgoing Bitcoin amount in
-     such a way, that its Euro equivalent plus any occuring fees add up to the
+     a specific euro amount. The server will pick the outgoing Bitcoin amount in
+     such a way, that its euro equivalent plus any occuring fees add up to the
      amount given by the user.
  * `amount`: The amount to be used in all calculations. This is either
-   interpreted as Satoshis or as an Euro amount * 10 ^ 5, depending on what type
+   interpreted as Satoshis or as an euro amount * 10 ^ 5, depending on what type
    of request is being made.
 
 Reply in case of success:
@@ -312,8 +312,8 @@ Regardless of which type of request has been made, the reply always has the same
 structure. All three of the following fields are present:
 
  * `btc`: The amount of bitcoins that will be sent out.
- * `usd_recipient`: The equivalent Euro amount for this Bitcoin payment.
- * `usd_account`: The Euro amount which will be deducted from the user's
+ * `usd_recipient`: The equivalent euro amount for this Bitcoin payment.
+ * `usd_account`: The euro amount which will be deducted from the user's
    account. So `usd_account` - `usd_recipient` is essential the fee the user
    is paying.
 
@@ -344,7 +344,7 @@ Request:
 
 The field `type` accepts the same options, as the quote request command (see
 above) and the `amount` field is interpreted accordingly (either as a Bitcoin
-amount or a Euro amount).
+amount or a euro amount).
 
 Reply in case of success:
 

@@ -18,7 +18,7 @@
 
             <p>
             Bridgewalker is a euro-denominated wallet for the Bitcoin economy.
-            Send and receive bitcoins, but maintain your balance in Euros.
+            Send and receive bitcoins, but maintain your balance in euros.
             Bridgewalker converts back and forth between the currencies just
             when you need to send bitcoins or receive them.
             </p>
@@ -111,7 +111,7 @@
                         of your account, both in text form as well as a
                         scannable QR code. Transactions to this address will
                         require a number of confirmations - typically three -
-                        after which they will be exchanged for Euros at the current
+                        after which they will be exchanged for euros at the current
                         market price and credited to your account.
                         </p>
                     </li>
@@ -128,12 +128,12 @@
                         enter the recipient's Bitcoin address manually, scan it
                         from a QR code or receive it via NFC. When entering the
                         amount, you can choose between specifying it in bitcoins
-                        or in Euros and Bridgewalker will do the currency
+                        or in euros and Bridgewalker will do the currency
                         conversion for you.
                         </p>
 
                         <p>
-                        When giving a Euro amount, the recipient will receive
+                        When giving a euro amount, the recipient will receive
                         bitcoins roughly equivalent to this amount. Because of
                         fees, slightly more will be deducted from your account.
                         If instead you would like to have no more than the
