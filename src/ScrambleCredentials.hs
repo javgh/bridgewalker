@@ -29,10 +29,10 @@ unScrambleText (c:cs) (k:ks)
                     (round :: Double -> Integer) $ fromIntegral k' / 42
 
 hardcodedKeyA :: [Integer]
-hardcodedKeyA = [210,378,84,336,252,336,210,168,0,336,336,42,336,84,210,126]
+hardcodedKeyA = [378,210,126,336,378,336,378,168,84,378,0,210,168,294,0,252,84,294,168,210,126]
 
 hardcodedKeyB :: [Integer]
-hardcodedKeyB = [0,168,210,126,126,210,126,0,378,42,168,168,84,168,42]
+hardcodedKeyB = [210,126,210,84,126,168,126,168,252,0,336,42,336]
 
 hardcodedKeyC :: [Integer]
 hardcodedKeyC = [168,84,252,210,168,168,336,42,84,84,336,378,42,378,378,336,378]
