@@ -329,10 +329,11 @@
                 Most likely at some point, although it is not a priority at the
                 moment. The current Android client talks to the server over a
                 websocket connection, so either an HTML5 client or some type of
-                desktop client would also be possible instead. I do not have a
-                timeframe for such alternative clients, but will document the
-                API at some point (and/or open source the Android client), which
-                would also allow other developers to step in.
+                desktop client would also be possible instead. Bridgewalker is
+                open source and the
+                <a href="https://github.com/javgh/bridgewalker/blob/master/doc/api.md">server API</a>
+                is documented - feel free to have a go at it, a third-party
+                desktop client would be very welcome!
                 </p>
             </div><!-- /tab-3 -->
 
