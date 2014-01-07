@@ -49,6 +49,65 @@
   
   <div class="post">
     <h1>
+      <a href="/blog/2014/01/07/bridgewalker-open-source/">
+        Bridgewalker is now open source
+      </a>
+    </h1>
+
+    <span class="post-date">07 Jan 2014</span>
+
+    <p>At <a href="http://www.hivewallet.com/">Hive</a> we have a strong commitment to open
+source. Today, we honor this commitment by open sourcing the Bridgewalker
+codebase. I am excited that this has been made possible by the <a href="/blog/2013/12/29/hive-acquisition/">Hive
+acquisition</a>
+and am very much looking forward to the new possibilities and projects that this
+might lead to down the line!</p>
+
+<p>The meat of the Bridgewalker codebase can be found in these three repositories:</p>
+
+<ul>
+<li><a href="https://github.com/javgh/bridgewalker">https://github.com/javgh/bridgewalker</a> - the Bridgewalker server component</li>
+<li><a href="https://github.com/javgh/Bridgewalker-Android">https://github.com/javgh/Bridgewalker-Android</a> - the Bridgewalker Android
+client</li>
+<li><a href="https://github.com/javgh/bridgewalker-deployment">https://github.com/javgh/bridgewalker-deployment</a> - configuration files and
+an Ansible script to deploy Bridgewalker to a server</li>
+</ul>
+
+
+<p>Then there are a number of support libraries and tools which the Bridgewalker
+server depends on:</p>
+
+<ul>
+<li><a href="https://github.com/javgh/mtgoxapi">https://github.com/javgh/mtgoxapi</a> - Haskell library for communicating with
+Mt.Gox (also uploaded to
+<a href="http://hackage.haskell.org/package/mtgoxapi">Hackage</a>)</li>
+<li><a href="https://github.com/javgh/bitcoin-rpc">https://github.com/javgh/bitcoin-rpc</a> - Haskell library to communicate with
+the Satoshi Bitcoin daemon (also uploaded to
+<a href="http://hackage.haskell.org/package/bitcoin-rpc">Hackage</a>)</li>
+<li><a href="https://github.com/javgh/MtGoxCachingProxy">https://github.com/javgh/MtGoxCachingProxy</a> - proxy that can be placed in
+front of the Mt.Gox websocket API to add failure detection and history</li>
+<li><a href="https://github.com/javgh/watchdog">https://github.com/javgh/watchdog</a> - simple control structure for Haskell
+to re-try an action with exponential backoff (also uploaded to
+<a href="http://hackage.haskell.org/package/watchdog">Hackage</a>)</li>
+<li><a href="https://github.com/javgh/metricsd-client">https://github.com/javgh/metricsd-client</a> - Haskell client for the metrics
+aggregator Metricsd (also uploaded to
+<a href="http://hackage.haskell.org/package/metricsd-client">Hackage</a>)</li>
+</ul>
+
+
+<p>I'm afraid that the documentation is only rudimentary in many places. This was
+only a side project for me for a long time. A working Bridgewalker server also
+consists of quite a few moving parts, so getting it all set up is somewhat
+involved. But each repository contains a brief README file which should
+hopefully get you started. If you have any questions, I am happy to try to help
+out - just shoot me an email at <a href="mailto:jan@uos.de">jan@uos.de</a>.</p>
+
+<p>Happy coding!</p>
+
+  </div>
+  
+  <div class="post">
+    <h1>
       <a href="/blog/2014/01/01/bitcoin-nfc-point-of-sale/">
         Using Bitcoin, NFC and Bluetooth to make a mobile euro payment in 15 seconds
       </a>
@@ -219,7 +278,7 @@ patches are always welcome! :-)</p>
 
     <span class="post-date">29 Dec 2013</span>
 
-    <p>Welcome to the Bridgewalker Blog! The news is already a couple of weeks old, but
+    <p>Welcome to the Bridgewalker blog! The news is already a couple of weeks old, but
 I would like to use this first post to report that Bridgewalker has been
 acquired be <a href="http://www.grabhive.com/">Hive</a>!</p>
 
@@ -258,5 +317,19 @@ announcement</a>.</p>
 
     </div>
 
+    <!-- Google Analytics -->
+    <script type="text/javascript">
+
+      var _gaq = _gaq || [];
+      _gaq.push(['_setAccount', 'UA-39518733-1']);
+      _gaq.push(['_trackPageview']);
+
+      (function() {
+        var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+        ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+        var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+      })();
+
+    </script>
   </body>
 </html>

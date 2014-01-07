@@ -4,13 +4,68 @@
  <title>Blog</title>
  <link href="https://www.bridgewalkerapp.com/blog/atom.xml" rel="self"/>
  <link href="https://www.bridgewalkerapp.com/blog/"/>
- <updated>2014-01-02T01:09:01+01:00</updated>
+ <updated>2014-01-07T18:15:37+01:00</updated>
  <id>https://www.bridgewalkerapp.com/blog</id>
  <author>
    <name>Jan Vornberger</name>
    <email>jan@uos.de</email>
  </author>
 
+ 
+ <entry>
+   <title>Bridgewalker is now open source</title>
+   <link href="https://www.bridgewalkerapp.com/blog/2014/01/07/bridgewalker-open-source/"/>
+   <updated>2014-01-07T00:00:00+01:00</updated>
+   <id>https://www.bridgewalkerapp.com/blog/2014/01/07/bridgewalker-open-source</id>
+   <content type="html">&lt;p&gt;At &lt;a href=&quot;http://www.hivewallet.com/&quot;&gt;Hive&lt;/a&gt; we have a strong commitment to open
+source. Today, we honor this commitment by open sourcing the Bridgewalker
+codebase. I am excited that this has been made possible by the &lt;a href=&quot;/blog/2013/12/29/hive-acquisition/&quot;&gt;Hive
+acquisition&lt;/a&gt;
+and am very much looking forward to the new possibilities and projects that this
+might lead to down the line!&lt;/p&gt;
+
+&lt;p&gt;The meat of the Bridgewalker codebase can be found in these three repositories:&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;&lt;a href=&quot;https://github.com/javgh/bridgewalker&quot;&gt;https://github.com/javgh/bridgewalker&lt;/a&gt; - the Bridgewalker server component&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://github.com/javgh/Bridgewalker-Android&quot;&gt;https://github.com/javgh/Bridgewalker-Android&lt;/a&gt; - the Bridgewalker Android
+client&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://github.com/javgh/bridgewalker-deployment&quot;&gt;https://github.com/javgh/bridgewalker-deployment&lt;/a&gt; - configuration files and
+an Ansible script to deploy Bridgewalker to a server&lt;/li&gt;
+&lt;/ul&gt;
+
+
+&lt;p&gt;Then there are a number of support libraries and tools which the Bridgewalker
+server depends on:&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;&lt;a href=&quot;https://github.com/javgh/mtgoxapi&quot;&gt;https://github.com/javgh/mtgoxapi&lt;/a&gt; - Haskell library for communicating with
+Mt.Gox (also uploaded to
+&lt;a href=&quot;http://hackage.haskell.org/package/mtgoxapi&quot;&gt;Hackage&lt;/a&gt;)&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://github.com/javgh/bitcoin-rpc&quot;&gt;https://github.com/javgh/bitcoin-rpc&lt;/a&gt; - Haskell library to communicate with
+the Satoshi Bitcoin daemon (also uploaded to
+&lt;a href=&quot;http://hackage.haskell.org/package/bitcoin-rpc&quot;&gt;Hackage&lt;/a&gt;)&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://github.com/javgh/MtGoxCachingProxy&quot;&gt;https://github.com/javgh/MtGoxCachingProxy&lt;/a&gt; - proxy that can be placed in
+front of the Mt.Gox websocket API to add failure detection and history&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://github.com/javgh/watchdog&quot;&gt;https://github.com/javgh/watchdog&lt;/a&gt; - simple control structure for Haskell
+to re-try an action with exponential backoff (also uploaded to
+&lt;a href=&quot;http://hackage.haskell.org/package/watchdog&quot;&gt;Hackage&lt;/a&gt;)&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://github.com/javgh/metricsd-client&quot;&gt;https://github.com/javgh/metricsd-client&lt;/a&gt; - Haskell client for the metrics
+aggregator Metricsd (also uploaded to
+&lt;a href=&quot;http://hackage.haskell.org/package/metricsd-client&quot;&gt;Hackage&lt;/a&gt;)&lt;/li&gt;
+&lt;/ul&gt;
+
+
+&lt;p&gt;I'm afraid that the documentation is only rudimentary in many places. This was
+only a side project for me for a long time. A working Bridgewalker server also
+consists of quite a few moving parts, so getting it all set up is somewhat
+involved. But each repository contains a brief README file which should
+hopefully get you started. If you have any questions, I am happy to try to help
+out - just shoot me an email at &lt;a href=&quot;mailto:jan@uos.de&quot;&gt;jan@uos.de&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;Happy coding!&lt;/p&gt;
+</content>
+ </entry>
  
  <entry>
    <title>Using Bitcoin, NFC and Bluetooth to make a mobile euro payment in 15 seconds</title>
@@ -176,7 +231,7 @@ patches are always welcome! :-)&lt;/p&gt;
    <link href="https://www.bridgewalkerapp.com/blog/2013/12/29/hive-acquisition/"/>
    <updated>2013-12-29T00:00:00+01:00</updated>
    <id>https://www.bridgewalkerapp.com/blog/2013/12/29/hive-acquisition</id>
-   <content type="html">&lt;p&gt;Welcome to the Bridgewalker Blog! The news is already a couple of weeks old, but
+   <content type="html">&lt;p&gt;Welcome to the Bridgewalker blog! The news is already a couple of weeks old, but
 I would like to use this first post to report that Bridgewalker has been
 acquired be &lt;a href=&quot;http://www.grabhive.com/&quot;&gt;Hive&lt;/a&gt;!&lt;/p&gt;
 
