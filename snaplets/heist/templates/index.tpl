@@ -387,6 +387,6 @@
 
     </script>
 
-    <a href="http://grabhive.com/"><img style="position: absolute; top: 0; right: 0; border: 0;" src="img/hive_ribbon.png" alt="Acquired by Hive"></a>
+    <a href="/blog/2013/12/29/hive-acquisition/"><img style="position: absolute; top: 0; right: 0; border: 0;" src="img/hive_ribbon.png" alt="Acquired by Hive"></a>
 </body>
 </html>
