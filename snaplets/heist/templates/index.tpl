@@ -54,10 +54,7 @@
                 </li>
             </ul>
 
-            <div id="phone">
-                <a
-                href="https://www.youtube.com/embed/ERVD1xoDT0M?autoplay=1&amp;vq=hd720" class="video fancybox.iframe" title="Play video">Play video</a>
-            </div>
+            <div id="phone"></div>
 
             <a href="img/qr.png" class="qr fancybox"><span>View QR Code</span></a>
         </div><!-- /intro-inner -->
