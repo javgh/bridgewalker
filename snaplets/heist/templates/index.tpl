@@ -31,9 +31,9 @@
 
             <ul id="features">
                 <li>
-                    <h2><i class="icon-user"></i> One-click registration</h2>
-                    Use guest mode to get up and running in seconds. Full
-                    accounts coming soon.
+                    <h2><i class="icon-file"></i> Open Source</h2>
+                    Both the Bridgewalker server as well as the Android client
+                    are <a href="/blog/2014/01/07/bridgewalker-open-source/">open source</a>.
                 </li>
                 <li>
                     <h2><i class="icon-money"></i> Fees will only go down</h2>
