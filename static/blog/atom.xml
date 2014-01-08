@@ -4,7 +4,7 @@
  <title>Blog</title>
  <link href="https://www.bridgewalkerapp.com/blog/atom.xml" rel="self"/>
  <link href="https://www.bridgewalkerapp.com/blog/"/>
- <updated>2014-01-07T18:15:37+01:00</updated>
+ <updated>2014-01-08T19:59:03+01:00</updated>
  <id>https://www.bridgewalkerapp.com/blog</id>
  <author>
    <name>Jan Vornberger</name>
@@ -23,6 +23,8 @@ codebase. I am excited that this has been made possible by the &lt;a href=&quot;
 acquisition&lt;/a&gt;
 and am very much looking forward to the new possibilities and projects that this
 might lead to down the line!&lt;/p&gt;
+
+&lt;p&gt;&lt;img style=&quot;width:200px;margin:auto;&quot; src=&quot;/blog/public/images/bridgewalker_screenshot_20140108.png&quot; alt=&quot;Bridgewalker screenshot&quot; /&gt;&lt;/p&gt;
 
 &lt;p&gt;The meat of the Bridgewalker codebase can be found in these three repositories:&lt;/p&gt;
 
