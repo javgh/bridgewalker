@@ -313,6 +313,12 @@
                 wallet, if you intend to gamble on SatoshiDice.
                 </p>
 
+                <h3>Q: Is the APK available outside of Google Play?</h3>
+                <p>
+                Yes, you can download a copy
+                <a href="apk/bridgewalker.apk">here</a>.
+                </p>
+
                 <h3>Q: Will there be a version of Bridgewalker for iOS?</h3>
                 <p>
                 I would like to support iOS, but it seems a little unclear to me
