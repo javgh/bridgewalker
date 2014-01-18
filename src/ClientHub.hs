@@ -10,7 +10,7 @@ module ClientHub
     , signalAccountUpdates
     , signalSuccessfulSend
     , signalFailedSend
-    , receivedPing
+    , receivedPingr
     ) where
 
 import Control.Applicative
@@ -231,43 +231,36 @@ registerClientWithHub (ClientHubHandle chChan) account = do
     return answerChan
 
 requestClientStatus :: ClientHubHandle -> BridgewalkerAccount -> IO ()
-requestClientStatus (ClientHubHandle chChan) account = do
+requestClientStatus (ClientHubHandle chChan) account = 
     writeChan chChan $ RequestClientStatus account
-    return ()
 
 requestQuote :: ClientHubHandle -> BridgewalkerAccount -> Integer -> Maybe T.Text -> AmountType -> IO ()
-requestQuote (ClientHubHandle chChan) account requestID mAddress amountType = do
+requestQuote (ClientHubHandle chChan) account requestID mAddress amountType = 
     writeChan chChan $ RequestQuote account requestID mAddress amountType
-    return ()
 
 sendPayment :: ClientHubHandle -> BridgewalkerAccount -> Integer -> T.Text -> AmountType -> IO ()
 sendPayment (ClientHubHandle chChan) account requestID address amountType =
     writeChan chChan $ SendPayment account requestID address amountType
 
 receivedPing :: ClientHubHandle -> BridgewalkerAccount -> IO ()
-receivedPing (ClientHubHandle chChan) account = do
+receivedPing (ClientHubHandle chChan) account = 
     writeChan chChan $ ReceivedPing account
-    return ()
 
 signalPossibleBitcoinEvents :: ClientHubHandle -> IO ()
-signalPossibleBitcoinEvents (ClientHubHandle chChan) = do
+signalPossibleBitcoinEvents (ClientHubHandle chChan) = 
     writeChan chChan SignalPossibleBitcoinEvents
-    return ()
 
 signalAccountUpdates :: ClientHubHandle -> [BridgewalkerAccount] -> IO ()
-signalAccountUpdates (ClientHubHandle chChan) accounts = do
+signalAccountUpdates (ClientHubHandle chChan) accounts = 
     writeChan chChan $ SignalAccountUpdates accounts
-    return ()
 
 signalSuccessfulSend :: ClientHubHandle -> BridgewalkerAccount -> Integer -> Maybe RPC.SerializedTransaction -> IO ()
-signalSuccessfulSend (ClientHubHandle chChan) account requestID mTx = do
+signalSuccessfulSend (ClientHubHandle chChan) account requestID mTx =
     writeChan chChan $ SignalSuccessfulSend account requestID mTx
-    return ()
 
 signalFailedSend :: ClientHubHandle-> BridgewalkerAccount -> Integer -> T.Text -> IO ()
-signalFailedSend (ClientHubHandle chChan) account requestID reason = do
+signalFailedSend (ClientHubHandle chChan) account requestID reason = 
     writeChan chChan $ SignalFailedSend account requestID reason
-    return ()
 
 sendPaymentToPAT :: IsBitcoinAddress a =>BridgewalkerHandles-> BridgewalkerAccount -> Integer -> a -> AmountType -> IO ()
 sendPaymentToPAT bwHandles account requestID address amountType = do
