@@ -22,14 +22,9 @@ import           Snap.Http.Server
 import           Snap.Snaplet
 import           Snap.Snaplet.Config
 import           Snap.Core
-import           System.Environment
 import           System.IO
 
-import           Bridgewalker
-import           Config
 import           SnapSite
-import           Tools.FastForwardDB
-import           Tools.InitDB
 
 #ifdef DEVELOPMENT
 import           Snap.Loader.Dynamic
@@ -73,33 +68,13 @@ import           Snap.Loader.Static
 --
 main :: IO ()
 main = do
-    args <- getArgs
-    case args of
-        ["--initdb"] -> do
-            putStrLn "Initializing Bridgewalker database tables..."
-            initDB
-        ["--reset-filteredeventtaskstate"] -> do
-            putStrLn "Resetting state for filtered event task..."
-            resetFilteredEventTaskState
-        ["--fastforwarddb"] -> do
-            putStrLn $ "Fast forwarding through transactions" ++
-                       " without processing them..."
-            bwHandles <- initBridgewalker
-            fastForwardDB bwHandles
-        _ -> bridgewalker
-
-bridgewalker :: IO ()
-bridgewalker = do
-    bwHandles <- initBridgewalker
-    let myGetActions = getActions bwHandles
-
     -- Depending on the version of loadSnapTH in scope, this either enables
     -- dynamic reloading, or compiles it without. The last argument to
     -- loadSnapTH is a list of additional directories to watch for changes to
     -- trigger reloads in development mode. It doesn't need to include source
     -- directories, those are picked up automatically by the splice.
     (conf, site, cleanup) <- $(loadSnapTH [| getConf |]
-                                          'myGetActions
+                                          'getActions
                                           ["snaplets/heist/templates"])
 
     _ <- try $ httpServe conf site :: IO (Either SomeException ())
@@ -132,9 +107,9 @@ getConf = commandLineAppConfig defaultConfig
 --
 -- This sample doesn't actually use the config passed in, but more
 -- sophisticated code might.
-getActions :: BridgewalkerHandles -> Config Snap AppConfig -> IO (Snap (), IO ())
-getActions bwHandles conf = do
+getActions :: Config Snap AppConfig -> IO (Snap (), IO ())
+getActions conf = do
     (msgs, site, cleanup) <- runSnaplet
-        (appEnvironment =<< getOther conf) (snapApp bwHandles)
+        (appEnvironment =<< getOther conf) snapApp
     hPutStrLn stderr $ T.unpack msgs
     return (site, cleanup)
