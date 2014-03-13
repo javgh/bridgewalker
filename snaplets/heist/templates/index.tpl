@@ -391,6 +391,12 @@
 
     </script>
 
-    <a href="/blog/2013/12/29/hive-acquisition/"><img style="position: absolute; top: 0; right: 0; border: 0;" src="img/hive_ribbon.png" alt="Acquired by Hive"></a>
+    <div id="warning_anchor">
+        <span id="warning">
+        Please note: Bridgewalker is in the process of being shut down. All user
+        funds will be returned in full. A claim process will be announced in the
+        next days.
+        </span>
+    </div>
 </body>
 </html>
