@@ -75,3 +75,17 @@ a {
 #sidebar, #newsletter input {
     color:#aaadb0;
     }
+
+/* shutdown warning */
+#warning_anchor {
+    position: absolute;
+    top: 10px;
+    width: 100%;
+    text-align:center;
+}
+
+#warning {
+    border:solid 1px #f2c779; 
+    background:#fff8c4;
+    padding:5px;
+}
