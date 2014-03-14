@@ -11,6 +11,7 @@ import Crypto.PasswordStore
 import Data.Aeson
 import Data.Aeson.Types
 import Database.PostgreSQL.Simple
+import System.FilePath
 import System.Random
 
 import qualified Control.Exception as E
@@ -60,6 +61,7 @@ data WebsocketCommand = WSRequestVersion { _wcClientVersion :: T.Text }
                                       , _wcAddress :: T.Text
                                       , _wcAmountType :: AmountType
                                       }
+                      | WSSubmitClaim { _wcAddress :: T.Text }
                       | WSPing
                       deriving (Show)
 
@@ -124,6 +126,10 @@ instance FromJSON WebsocketCommand
                 "amount_based_on_usd_after_fees" ->
                     return $ WSSendPayment i addr (AmountBasedOnUSDAfterFees amount)
                 _ -> mzero
+        Just "submit_claim" -> do
+            addrRaw <- o .: "address" :: Parser T.Text
+            let addr = T.strip addrRaw
+            return $ WSSubmitClaim addr
         Just "request_version" -> WSRequestVersion <$> o .: "client_version"
         Just "create_guest_account" -> return WSCreateGuestAccount
         Just "login" -> WSLogin <$> o .: "account_name"
@@ -286,6 +292,13 @@ continueAuthenticated combinationChan sink chHandle account =
                     requestQuote chHandle account reqID mAddress amountType
                 WSSendPayment reqID address amountType ->
                     sendPayment chHandle account reqID address amountType
+                WSSubmitClaim address -> do
+                    let claimFile = "./claims" </> "account_"
+                            ++ (show . bAccount) account
+                            ++ "_" ++ T.unpack address
+                    appendFile claimFile $ (show . bAccount) account
+                                                ++ "\t" ++ T.unpack address
+                                                ++ "\n"
                 _ -> let wsData = WS.textData . prepareWSReply $
                             WSCommandNotAvailable "Command not available\
                                                    \ after login."
