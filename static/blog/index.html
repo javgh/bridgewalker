@@ -49,6 +49,117 @@
   
   <div class="post">
     <h1>
+      <a href="/blog/2014/03/14/bridgewalker-shutdown/">
+        Mt.Gox fallout&#58; Bridgewalker is shutting down
+      </a>
+    </h1>
+
+    <span class="post-date">14 Mar 2014</span>
+
+    <p>It is with regret that I have to announce, that Bridgewalker is shutting down.
+Since it was using Mt.Gox as the backend exchange, it was directly affected by
+Mt.Gox imploding. But there were also a few other factors which played into this
+decision, which I detail below. Thanks to everyone who supported this project!</p>
+
+<p>All user funds will be returned in full. An update should be available shortly
+through Google Play which will allow you to submit a Bitcoin address, where you
+would like to have your funds sent. I will use
+<a href="https://bitcoinaverage.com/markets.htm#EUR">BitcoinAverage</a> to determine the
+exchange rate. Please allow a few days for your request to be processed. I will
+be returning user funds for at least the next 6 months, but would ask you to put
+in your request soon. Feel free to email me if you have any questions.</p>
+
+<p>"Why did you still use Mt.Gox? You should have seen that coming long ago!" True,
+and I did to some extend, which is why my losses are manageable. The main reason
+I never did the switch - and I contemplated it several times - was, that for all
+its shortcomings, Mt.Gox still was for a long time the only big exchange with a
+streaming data feed. And I considered it an important feature to keep track of
+the market very closely, to be able to safely provide competitive currency
+conversion services - a major cornerstone of the Bridgewalker architecture. So
+switching to a different exchange would have required quite a bit of extra work
+and a worse service level as a result. Not the most attractive value
+proposition, so I decided to instead work on new features and hope that Mt.Gox
+would get their act together. That optimism was unfortunately misplaced, but I
+am prepared to deal with the consequences. The losses that did occur I will
+replace out of my personal funds.</p>
+
+<p>But the Mt.Gox debacle is not the only reason for the shutdown. So far, I
+have not managed to gain the traction with Bridgewalker that I was hoping for.
+There are probably many reasons for that, among them certainly, that it is a
+tough sell to get people to entrust their funds with an unproven startup. And
+for good reasons! I was always looking for ways to get rid of the requirement of
+holding user funds, but have so far not found a practical and cost-competitive
+alternative.</p>
+
+<p>I still believe, that a service like Bridgewalker - providing a way of using
+Bitcoin only as a payment mechanism, without holding Bitcoin yourself - is
+something that has a target audience. As we go forward, we will hopefully be
+able to deploy interesting Bitcoin-based solutions. Solutions like tap-to-pay,
+metered billing (e.g. WiFi paid by the kb using micropayment channels) and making
+smallish payments right in the browser, to name just three things that I find
+very interesting. I am convinced that there will be a group of users, that will
+want to use these services, but would rather maintain their account in their
+trusted fiat currency of choice.</p>
+
+<p>And there are good reasons for wanting to keep your funds in fiat:</p>
+
+<ul>
+<li>The often cited volatility of Bitcoin. It is true and will likely remain true
+for some time to come.</li>
+<li>Familiarity with your local currency. You have a feeling for what things cost
+and a sense of stability, simply because everything around you is priced in
+that same currency. Your currency might fluctuate on the world markets, but
+your coffee at Starbucks still costs the same as yesterday - at least on most
+days.</li>
+<li>Easier accounting. This one is especially important for the merchant side.
+Conducting business relies a lot on proper accounting and even if you are the
+biggest Bitcoin fan, it might not be worth the trouble, to have to track a
+foreign currency and deal with things like gains and losses caused by exchange
+rate changes. Simply pretending that the customer paid you in your local
+currency and just used Bitcoin as a technical solution to do so, can simplify
+your bookkeeping and make it easier to get started accepting Bitcoins.
+(Bridgewalker would have eventually attempted to eat BitPay's lunch. ;-P )</li>
+<li>Separating the use of Bitcoin as an investment and the use of Bitcoin as a
+payment mechanism. Keep your bitcoins in cold storage and keep some fiat in
+your Bridgewalker account to spend on Bitcoin services, without affecting your
+Bitcoin holdings. The often requested "buy-as-you-spend" feature of Coinbase
+follows from the same motivation.</li>
+</ul>
+
+
+<p>In some ways, it might be, that Bridgewalker was simply too early and
+Bitcoin-based solutions will need to mature more, before there is a real demand
+for this type of service. I might try again at a later time. If I do, it will be
+without an exchange in the background though. It's simply too big of a failure
+point and also creates all sorts of legal challenges. Maybe projects like
+<a href="https://www.counterparty.co/">Counterparty</a> or
+<a href="https://www.ethereum.org/">Ethereum</a> will be ready by that time, to provide
+crypto-equivalents of USD and EUR, that track their real-world counter party
+through some kind of gambling/financial derivatives.</p>
+
+<p>Then the Bridgewalker client could be completely server-less and just use one or
+several blockchains to provide the same functionality. I would imagine, that the
+client would maintain a small amount of bitcoins as a buffer, to be able to
+quickly make transactions. But then move bitcoins from and to the buffer into
+cryptoUSD or cryptoEUR to keep the purchasing power pegged to those fiat
+currencies. The question is, whether this can be made cost-competitive, which
+depends on the amount of market spread, slippage, tracking errors and other
+sources of friction.</p>
+
+<p>By the way, Bridgewalker is
+<a href="/blog/2014/01/07/bridgewalker-open-source/">open source</a>,
+so if you feel like tackling any of this and want to reuse parts of
+Bridgewalker, feel free to do so!</p>
+
+<p>For the moment, I will be focusing on pure Bitcoin wallets again at
+<a href="https://www.hivewallet.com/">Hive</a>. Our Android wallet will be arriving shortly
+- keep an eye out for it! And who knows, maybe at some point Bridgewalker will
+be rising from its ashes. ;-) Thanks again for all your support!</p>
+
+  </div>
+  
+  <div class="post">
+    <h1>
       <a href="/blog/2014/01/07/bridgewalker-open-source/">
         Bridgewalker is now open source
       </a>
