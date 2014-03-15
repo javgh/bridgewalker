@@ -1,0 +1,66 @@
+#!/usr/bin/env python
+
+import psycopg2
+import re
+import sys
+
+from os.path import basename
+
+if len(sys.argv) < 2:
+    print "Usage: %s <claim file>" % sys.argv[0]
+    sys.exit(1)
+
+claim_file = sys.argv[1]
+claim_data = basename(claim_file)
+matchObj = re.match(r'^account_([0-9]*)_(.*)$', claim_data)
+if matchObj == None:
+    print "Claim file does not follow expected pattern"
+    sys.exit(1)
+
+nr = int(matchObj.group(1))
+address = matchObj.group(2)
+
+conn = psycopg2.connect(database='bridgewalker')
+cur = conn.cursor()
+cur.execute("select usd_balance from accounts where account_nr = %s", (nr,))
+row = cur.fetchone()
+
+balance = float(row[0]) / 10 ** 5
+status_before = "Account: %d\tBalance: %f EUR\tAddress: %s" \
+                    % (nr, balance, address)
+print status_before
+
+raw_input("Press enter to record status in claim file.")
+f = open(claim_file, 'a')
+f.write(status_before + "\n")
+
+print("Exchange rate source: https://bitcoinaverage.com/markets.htm#EUR")
+rate = raw_input("Please provide current exchange rate. 1 BTC = ? EUR: ")
+rate = float(rate)
+amount_btc = round(balance * 10 ** 8 / rate) / 10 ** 8
+
+amount_info = "Exchange rate: %f EUR\tAmount in BTC: %f" \
+                % (rate, amount_btc)
+print(amount_info)
+f.write(amount_info + "\n")
+
+print "Please run: ./bitcoind sendtoaddress %s %f" % (address, amount_btc)
+tx_id = raw_input("Please provide transaction id: ")
+tx_info = "Transaction id: %s" % tx_id
+print(tx_info)
+f.write(tx_info + "\n")
+
+raw_input("Press enter to update database.")
+cur.execute("update accounts set usd_balance = 0 where account_nr = %s", (nr,))
+conn.commit()
+
+cur.execute("select usd_balance from accounts where account_nr = %s", (nr,))
+row = cur.fetchone()
+
+balance = float(row[0]) / 10 ** 5
+status_after = "Account: %d\tBalance: %f EUR\tAddress: %s" \
+                    % (nr, balance, address)
+print status_after
+f.write(status_after + "\n")
+
+f.close()
