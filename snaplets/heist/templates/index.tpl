@@ -393,9 +393,10 @@
 
     <div id="warning_anchor">
         <span id="warning">
-        Please note: Bridgewalker is in the process of being shut down. All user
-        funds will be returned in full. A claim process will be announced in the
-        next days.
+        Please note: Bridgewalker is no longer operational. This website remains
+        online for posterity's sake. See the
+        <a href="/blog/2014/03/14/bridgewalker-shutdown/">shutdown blog post</a>
+        for more details.
         </span>
     </div>
 </body>
